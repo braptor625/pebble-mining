@@ -302,8 +302,8 @@ const cv = document.getElementById("c"), cx = cv.getContext("2d");
 let LW, LH, SC = 1, L = {}, bgCache = null;
 function layout() {
   const portrait = innerHeight > innerWidth * 1.15;
-  if (portrait) { LW = 156; LH = 360; L = { sx: 6, sy: 6, px: 6, py: 182 }; }
-  else { LW = 310; LH = 180; L = { sx: 6, sy: 6, px: 160, py: 4 }; }
+  if (portrait) { LW = 156; LH = 342; L = { sx: 6, sy: 6, px: 6, py: 182 }; }
+  else { LW = 310; LH = 180; L = { sx: 6, sy: 6, px: 160, py: 13 }; }
   cv.width = LW; cv.height = LH;
   const fit = Math.min(innerWidth / LW, innerHeight / LH);
   SC = fit >= 1 ? Math.floor(fit) : fit;
@@ -592,10 +592,9 @@ function item(x, y, w, h, fn, opt = {}) {
   return { ink: sel ? C.black : opt.disabled ? "#c08ad0" : "#ffffff", d: down ? 1 : 0, sel };
 }
 function panelBg(x, y, w, h) { cx.fillStyle = C.purpleLo; cx.fillRect(x, y, w, h); cx.fillStyle = C.purple; cx.fillRect(x + 1, y + 1, w - 2, h - 2); }
-const TIPS = ["HOLD THE MINE TO DIG FASTER", "CLICK THE GOLDEN PIXEL!", "SELL TREASURE FOR PIXELS", "8 TOOLS OPEN THE PORTAL", "MULTIPLIERS CARRY OVER"];
 function drawPanel(now) {
   const X = L.px, Y = L.py, PW = 144;
-  panelBg(X, Y, PW, 172);
+  panelBg(X, Y, PW, 154);
   // header: which world you're in and how far through its tools
   cx.fillStyle = C.yellow; cx.fillRect(X + 2, Y + 2, PW - 4, 17);
   txt(`${S.w + 1}. ${W().name}`, X + 5, Y + 4, C.black);
@@ -611,8 +610,6 @@ function drawPanel(now) {
     icon(ic, x + 14, tY + 4 + r.d);
   });
   ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, Y + 40, PW - 4, 112, now);
-  // rotating tip
-  txt(TIPS[Math.floor(now / 6000) % TIPS.length], X + PW / 2, Y + 160, C.dim, 1, "center");
 }
 function previewBox(x, y, sel, ground) {
   cx.fillStyle = sel ? "#e8cc20" : "#00000040"; cx.fillRect(x, y, 38, 48);
