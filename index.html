@@ -17,7 +17,7 @@
 "use strict";
 // ================================================================ constants
 const VW = 144, VH = 168, HUD_H = 24, ROW = 4, PIT0 = 28, LAYERS_PER_WORLD = 100;
-const SAVE_KEY = "pebbleMinerSave.v2";
+const SAVE_KEY = "pebbleMinerSave.v3";
 const C = {
   bg: "#14121c", bg2: "#1b1826", hi: "#4f4a66", lo: "#15131c", ink: "#ffffff",
   purple: "#6d1c80", purple2: "#83299a", purpleHi: "#a24bb8", purpleLo: "#3a0c45",
@@ -28,32 +28,32 @@ const C = {
 // economy knobs (tuned with a headless pacing sim)
 const BAL = {
   L0: 40,            // dirt pixels in the first layer
-  hard: 1.045,       // each layer is this much bigger/harder
-  rich: 1.012,       // each layer's pixels are worth this much more
-  eqSec: 40,         // equipment power targets ~this many seconds per layer at its start
-  eqGrow: 1.6,       // extra power per equipment tier
-  eqCost: 15,        // equipment costs ~this many layers of income at the previous cap
-  tChance: 0.3,      // chance a layer holds a treasure
-  tLayers: 4,        // a common treasure sells for ~this many layers of income
+  hard: 1.037,       // each layer is this much bigger/harder
+  eqGrow: 2,         // each equipment tier digs this much faster
+  eqC0: 150,         // price of the first equipment upgrade
+  eqCg: 8.7,         // each equipment tier costs this much more than the last
+  tChance: 0.15,     // chance a layer holds a treasure
+  tLayers: 0.5,      // a common treasure sells for ~this many layers of dirt
   clickFrac: 0.15,   // a click digs this fraction of a second of power
+  clickGap: 125,     // ms between counted clicks (8/sec, same as holding)
 };
 
 // Worlds are depth zones of 100 layers. Treasure: [name, shape, color, value multiplier]
 const WORLDS = [
   { name: "Pebble Quarry", sky: ["#8fe3f0", "#d9f6fa"], cloud: "#c8d0d4", ground: ["#c2551e", "#a8461a", "#8a3a18"], speck: ["#1b0f08", "#ffcf3a"],
-    loot: [["Ruby Heart", "heart", "#e8202a", 1], ["Sapphire", "round", "#3050e0", 3], ["Elixir", "potion", "#7fe0ff", 10], ["Diamond", "diamond", "#9ff4ff", 40], ["Gold Idol", "idol", "#ffd23f", 200]] },
+    loot: [["Ruby Heart", "heart", "#e8202a", 1], ["Sapphire", "round", "#3050e0", 2], ["Elixir", "potion", "#7fe0ff", 5], ["Diamond", "diamond", "#9ff4ff", 15], ["Gold Idol", "idol", "#ffd23f", 50]] },
   { name: "Sunscorch Desert", sky: ["#ffc46a", "#fff1cf"], cloud: "#fff6e0", ground: ["#f08a1c", "#d9741a", "#b85e17"], speck: ["#4a2408", "#ffe58a"],
-    loot: [["Scarab", "round", "#2e9e5b", 1], ["Sand Rose", "heart", "#ff7ab8", 3], ["Sun Coin", "coin", "#ffd23f", 10], ["Topaz", "diamond", "#ffb347", 40], ["Pharaoh Mask", "idol", "#ffe14d", 200]] },
+    loot: [["Scarab", "round", "#2e9e5b", 1], ["Sand Rose", "heart", "#ff7ab8", 2], ["Sun Coin", "coin", "#ffd23f", 5], ["Topaz", "diamond", "#ffb347", 15], ["Pharaoh Mask", "idol", "#ffe14d", 50]] },
   { name: "Frostveil Caves", sky: ["#bcd8f0", "#f2f8ff"], cloud: "#ffffff", ground: ["#9fc8e8", "#6f9cc8", "#4a6fa0"], speck: ["#1d3150", "#ffffff"],
-    loot: [["Frost Pearl", "round", "#e8fbff", 1], ["Ice Shard", "diamond", "#7fd6ff", 3], ["Snow Globe", "potion", "#c0e8ff", 10], ["Glacier Heart", "heart", "#4d8bff", 40], ["Yeti Idol", "idol", "#f0f4ff", 200]] },
+    loot: [["Frost Pearl", "round", "#e8fbff", 1], ["Ice Shard", "diamond", "#7fd6ff", 2], ["Snow Globe", "potion", "#c0e8ff", 5], ["Glacier Heart", "heart", "#4d8bff", 15], ["Yeti Idol", "idol", "#f0f4ff", 50]] },
   { name: "Ember Depths", sky: ["#2a0a0a", "#6a200c"], cloud: "#5a2a20", ground: ["#5a2a24", "#44201c", "#301614"], speck: ["#120604", "#ff8a2a"],
-    loot: [["Magma Orb", "round", "#ff7b00", 1], ["Ruby", "diamond", "#ff2e4d", 3], ["Fire Elixir", "potion", "#ffb020", 10], ["Obsidian Star", "star", "#7a4aaa", 40], ["Dragon Idol", "idol", "#ff5a2a", 200]] },
+    loot: [["Magma Orb", "round", "#ff7b00", 1], ["Ruby", "diamond", "#ff2e4d", 2], ["Fire Elixir", "potion", "#ffb020", 5], ["Obsidian Star", "star", "#7a4aaa", 15], ["Dragon Idol", "idol", "#ff5a2a", 50]] },
   { name: "Lunar Basin", sky: ["#05060f", "#1a1d33"], cloud: "#2a2d44", ground: ["#a8a8b4", "#80808c", "#5c5c68"], speck: ["#2a2a33", "#eeeeff"],
-    loot: [["Moon Rock", "round", "#d8d8e8", 1], ["Comet Shard", "diamond", "#5cf0ff", 3], ["Alien Vial", "potion", "#8dff6a", 10], ["Star Shard", "star", "#fff27a", 40], ["Rover Idol", "idol", "#c0c8ff", 200]] },
+    loot: [["Moon Rock", "round", "#d8d8e8", 1], ["Comet Shard", "diamond", "#5cf0ff", 2], ["Alien Vial", "potion", "#8dff6a", 5], ["Star Shard", "star", "#fff27a", 15], ["Rover Idol", "idol", "#c0c8ff", 50]] },
   { name: "Crystal Abyss", sky: ["#1a0b2e", "#3d1b6b"], cloud: "#4a2a7a", ground: ["#5a3b8f", "#45296f", "#301c52"], speck: ["#140a26", "#ff9cf7"],
-    loot: [["Amethyst", "diamond", "#b46bff", 1], ["Opal", "round", "#ffeef7", 3], ["Prism Vial", "potion", "#9cf6ff", 10], ["Heart Crystal", "heart", "#ff2d6f", 40], ["Crystal Crown", "crown", "#ff5ce1", 200]] },
+    loot: [["Amethyst", "diamond", "#b46bff", 1], ["Opal", "round", "#ffeef7", 2], ["Prism Vial", "potion", "#9cf6ff", 5], ["Heart Crystal", "heart", "#ff2d6f", 15], ["Crystal Crown", "crown", "#ff5ce1", 50]] },
   { name: "The Void", sky: ["#000000", "#0b0716"], cloud: "#1a1426", ground: ["#2a2240", "#1c1630", "#100c1e"], speck: ["#05030a", "#a78bfa"],
-    loot: [["Echo Stone", "round", "#6f6a8a", 1], ["Nebula Pearl", "round", "#c77dff", 3], ["Void Vial", "potion", "#3a0ca3", 10], ["Dark Star", "star", "#4cc9f0", 40], ["Cosmic Egg", "idol", "#ff9e00", 200]] },
+    loot: [["Echo Stone", "round", "#6f6a8a", 1], ["Nebula Pearl", "round", "#c77dff", 2], ["Void Vial", "potion", "#3a0ca3", 5], ["Dark Star", "star", "#4cc9f0", 15], ["Cosmic Egg", "idol", "#ff9e00", 50]] },
 ];
 const EQUIP = [
   { name: "Shovel", cap: 5, kind: "foot", tool: "shovel" },
@@ -74,19 +74,19 @@ const EQUIP = [
   { name: "Star Eater", cap: Infinity, body: "#2a2340", tool: "vortex" },
 ];
 const layerSize = d => BAL.L0 * Math.pow(BAL.hard, d);
-const pixVal = d => Math.pow(BAL.rich, d);
+const pixVal = () => 1; // a dug pixel is always worth one Pixel
 const prevCap = k => k ? EQUIP[k - 1].cap : 0;
-const eqPower = k => Math.max(1, layerSize(prevCap(k)) / BAL.eqSec) * Math.pow(BAL.eqGrow, k);
-const eqCost = k => BAL.eqCost * layerSize(prevCap(k)) * pixVal(prevCap(k));
+const eqPower = k => Math.pow(BAL.eqGrow, k);
+const eqCost = k => BAL.eqC0 * Math.pow(BAL.eqCg, k - 1);
 
 const MULTS = [
-  { id: "coffee", name: "Strong Coffee", icon: "cup", desc: l => `DIG SPEED X${fmt2(Math.pow(1.2, l))}`, cost: l => 40 * Math.pow(1.55, l) },
-  { id: "moles", name: "Helper Moles", icon: "mole", desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .25)}`, cost: l => 150 * Math.pow(1.4, l) },
-  { id: "sharp", name: "Sharp Edges", icon: "pick", desc: l => `CLICK POWER X${l + 1}`, cost: l => 25 * Math.pow(1.5, l) },
+  { id: "coffee", name: "Strong Coffee", icon: "cup", desc: l => `DIG SPEED X${fmt2(Math.pow(1.1, l))}`, cost: l => 40 * Math.pow(1.6, l) },
+  { id: "moles", name: "Helper Moles", icon: "mole", desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}`, cost: l => 150 * Math.pow(1.5, l) },
+  { id: "sharp", name: "Sharp Edges", icon: "pick", desc: l => `CLICK POWER X${l + 1}`, cost: l => 25 * Math.pow(1.6, l) },
   { id: "luck", name: "Lucky Charm", icon: "clover", max: 20, desc: l => `TREASURE CHANCE X${fmt2(1 + l * .15)}`, cost: l => 300 * Math.pow(1.9, l) },
-  { id: "apprais", name: "Appraiser", icon: "glass", desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}`, cost: l => 500 * Math.pow(1.6, l) },
+  { id: "apprais", name: "Appraiser", icon: "glass", desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}`, cost: l => 500 * Math.pow(1.7, l) },
   { id: "shift", name: "Night Shift", icon: "moon", max: 10, desc: l => `EARN ${l * 10}% WHILE AWAY`, cost: l => 2000 * Math.pow(2.5, l) },
-  { id: "turbo", name: "Turbo Engine", icon: "bolt", max: 15, needVeh: true, desc: l => `VEHICLE SPEED X${fmt2(Math.pow(1.6, l))}`, cost: l => 5e4 * Math.pow(12, l) },
+  { id: "turbo", name: "Turbo Engine", icon: "bolt", max: 15, needVeh: true, desc: l => `VEHICLE SPEED X${fmt2(Math.pow(1.4, l))}`, cost: l => 5e4 * Math.pow(25, l) },
 ];
 
 // ================================================================ state
@@ -110,8 +110,8 @@ const cap = () => EQUIP[S.eq].cap;
 const blocked = () => S.depth >= cap();
 let frenzy = 0;
 function power() {
-  let p = eqPower(S.eq) * Math.pow(1.2, S.m.coffee) * (1 + S.m.moles * .25);
-  if (S.eq >= 3) p *= Math.pow(1.6, S.m.turbo);
+  let p = eqPower(S.eq) * Math.pow(1.1, S.m.coffee) * (1 + S.m.moles * .1);
+  if (S.eq >= 3) p *= Math.pow(1.4, S.m.turbo);
   return p * (frenzy > 0 ? 7 : 1);
 }
 const clickPower = () => Math.max(1, power() * BAL.clickFrac) * (1 + S.m.sharp);
@@ -156,7 +156,7 @@ function layerDone() {
   if (S.depth % LAYERS_PER_WORLD === 0 && S.depth / LAYERS_PER_WORLD < WORLDS.length) {
     const w = W();
     sfx("portal"); shake = 8;
-    showModal("NEW WORLD!", [`You broke through into ${w.name}.`, "New ground, new treasures, and every pixel here is worth more."]);
+    showModal("NEW WORLD!", [`You broke through into ${w.name}.`, "New ground to dig and new treasures to find."]);
   } else if (S.depth % 10 === 0) sfx("layer");
   if (blocked() && S.eq + 1 < EQUIP.length) toast("TOO HARD! BUY BETTER EQUIPMENT", C.red);
 }
@@ -796,7 +796,9 @@ cv.addEventListener("pointerdown", e => {
   if (modal) return;
   if (!inScene(mouse)) { confirmKey = null; return; }
   if (golden && Math.abs(mouse.x - L.sx - golden.x) < 8 && Math.abs(mouse.y - L.sy - golden.y) < 8) { clickGolden(); return; }
-  holding = true; nextClick = 0;
+  holding = true;
+  const now = performance.now();
+  if (now >= nextClick) { clickDig(); nextClick = now + BAL.clickGap; }
 });
 cv.addEventListener("pointermove", e => { mouse = toLogical(e); });
 addEventListener("pointerup", () => { holding = false; mouseDown = false; });
@@ -807,7 +809,7 @@ cv.addEventListener("contextmenu", e => e.preventDefault());
 let lastT = performance.now(), saveAcc = 0;
 function update(dt, now) {
   S.stats.time += dt;
-  if (holding && !modal && now >= nextClick) { clickDig(); nextClick = now + 125; }
+  if (holding && !modal && now >= nextClick) { clickDig(); nextClick = now + BAL.clickGap; }
   if (!modal) dig(power() * dt);
   ppsShown += (earnedFrame / Math.max(dt, 1e-3) - ppsShown) * Math.min(1, dt * 1.5);
   earnedFrame = 0;
