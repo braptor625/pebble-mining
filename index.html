@@ -16,8 +16,8 @@
 <script>
 "use strict";
 // ================================================================ constants
-const VW = 144, VH = 168, HUD_H = 24, ROW = 4, PIT0 = 28, LAYERS_PER_WORLD = 100;
-const SAVE_KEY = "pebbleMinerSave.v3";
+const VW = 144, VH = 168, HUD_H = 24, LB = 24, FRONT = 92, TOOLS = 8;
+const SAVE_KEY = "pebbleMinerSave.v4";
 const C = {
   bg: "#14121c", bg2: "#1b1826", hi: "#4f4a66", lo: "#15131c", ink: "#ffffff",
   purple: "#6d1c80", purple2: "#83299a", purpleHi: "#a24bb8", purpleLo: "#3a0c45",
@@ -25,75 +25,61 @@ const C = {
   gold: "#ffe33a", red: "#ff5a4e", green: "#8dff6a", dim: "#d9a6e6", pit: "#b8b8b8",
   hud: "#0e3c78", hudHi: "#79b0ea",
 };
-// economy knobs (tuned with a headless pacing sim)
+// economy knobs (tuned with a headless pacing sim: ~31h to finish for an efficient player)
 const BAL = {
-  L0: 40,            // dirt pixels in the first layer
-  hard: 1.037,       // each layer is this much bigger/harder
-  eqGrow: 2,         // each equipment tier digs this much faster
-  eqC0: 150,         // price of the first equipment upgrade
-  eqCg: 8.7,         // each equipment tier costs this much more than the last
-  tChance: 0.15,     // chance a layer holds a treasure
-  tLayers: 0.5,      // a common treasure sells for ~this many layers of dirt
+  toolGrow: 2,       // each tool digs this much faster
+  toolC0: 100,       // price of the second tool
+  toolCg: 7.5,       // each tool costs this much more than the last...
+  toolCgW: 0.25,     // ...plus this much per world
+  worldVal: 1000,    // pixels are worth this much more in each new world
+  worldHard: 11,     // and prices rise this much more than that
+  portalMul: 3,      // the portal costs this many times the last tool
+  tEvery: 30,        // seconds between treasures, on average
+  tSec: 20,          // a common treasure is worth this many seconds of digging
   clickFrac: 0.15,   // a click digs this fraction of a second of power
   clickGap: 125,     // ms between counted clicks (8/sec, same as holding)
 };
 
-// Worlds are depth zones of 100 layers. Treasure: [name, shape, color, value multiplier]
+// Worlds: palette, 8 unique tools and 5 treasures. Tool: [name, foot tool or [body color, vehicle tool]]
+// Treasure: [name, shape, color, value multiplier]
 const WORLDS = [
   { name: "Pebble Quarry", sky: ["#8fe3f0", "#d9f6fa"], cloud: "#c8d0d4", ground: ["#c2551e", "#a8461a", "#8a3a18"], speck: ["#1b0f08", "#ffcf3a"],
+    tools: [["Shovel", "shovel"], ["Pickaxe", "pick"], ["Jackhammer", "jack"], ["Mine Cart", ["#8a8f99", "scoop"]], ["Saw Tank", ["#38c936", "saw"]], ["Red Dozer", ["#e23b2e", "cone"]], ["Steam Borer", ["#c9a227", "bigcone"]], ["Mega Drill", ["#ff8c2a", "bigcone"]]],
     loot: [["Ruby Heart", "heart", "#e8202a", 1], ["Sapphire", "round", "#3050e0", 2], ["Elixir", "potion", "#7fe0ff", 5], ["Diamond", "diamond", "#9ff4ff", 15], ["Gold Idol", "idol", "#ffd23f", 50]] },
   { name: "Sunscorch Desert", sky: ["#ffc46a", "#fff1cf"], cloud: "#fff6e0", ground: ["#f08a1c", "#d9741a", "#b85e17"], speck: ["#4a2408", "#ffe58a"],
+    tools: [["Sand Scoop", "shovel"], ["Bone Pick", "pick"], ["Dune Buggy", ["#e0b060", "scoop"]], ["Sand Crawler", ["#c48a4a", "saw"]], ["Scarab Borer", ["#2e9e5b", "cone"]], ["Sun Laser", ["#ffcf3a", "laser"]], ["Sandworm Rig", ["#b85e17", "bigcone"]], ["Sphinx Breaker", ["#ffe14d", "vortex"]]],
     loot: [["Scarab", "round", "#2e9e5b", 1], ["Sand Rose", "heart", "#ff7ab8", 2], ["Sun Coin", "coin", "#ffd23f", 5], ["Topaz", "diamond", "#ffb347", 15], ["Pharaoh Mask", "idol", "#ffe14d", 50]] },
   { name: "Frostveil Caves", sky: ["#bcd8f0", "#f2f8ff"], cloud: "#ffffff", ground: ["#9fc8e8", "#6f9cc8", "#4a6fa0"], speck: ["#1d3150", "#ffffff"],
+    tools: [["Ice Pick", "pick"], ["Snow Drill", "jack"], ["Snowcat", ["#d8e8ff", "scoop"]], ["Frost Auger", ["#7fd6ff", "cone"]], ["Glacier Saw", ["#4d8bff", "saw"]], ["Cryo Laser", ["#9cf6ff", "laser"]], ["Avalanche Dozer", ["#f4f8ff", "bigcone"]], ["Polar Titan", ["#2f6bff", "vortex"]]],
     loot: [["Frost Pearl", "round", "#e8fbff", 1], ["Ice Shard", "diamond", "#7fd6ff", 2], ["Snow Globe", "potion", "#c0e8ff", 5], ["Glacier Heart", "heart", "#4d8bff", 15], ["Yeti Idol", "idol", "#f0f4ff", 50]] },
   { name: "Ember Depths", sky: ["#2a0a0a", "#6a200c"], cloud: "#5a2a20", ground: ["#5a2a24", "#44201c", "#301614"], speck: ["#120604", "#ff8a2a"],
+    tools: [["Obsidian Pick", "pick"], ["Magma Hammer", "jack"], ["Lava Cart", ["#7a3a2a", "scoop"]], ["Magma Mole", ["#ff6a1a", "cone"]], ["Ember Saw", ["#ff2e4d", "saw"]], ["Inferno Laser", ["#ffb020", "laser"]], ["Dragon Drill", ["#9a1a1a", "bigcone"]], ["Phoenix Rig", ["#fff27a", "plasma"]]],
     loot: [["Magma Orb", "round", "#ff7b00", 1], ["Ruby", "diamond", "#ff2e4d", 2], ["Fire Elixir", "potion", "#ffb020", 5], ["Obsidian Star", "star", "#7a4aaa", 15], ["Dragon Idol", "idol", "#ff5a2a", 50]] },
   { name: "Lunar Basin", sky: ["#05060f", "#1a1d33"], cloud: "#2a2d44", ground: ["#a8a8b4", "#80808c", "#5c5c68"], speck: ["#2a2a33", "#eeeeff"],
+    tools: [["Moon Pick", "pick"], ["Grav Hammer", "jack"], ["Lunar Rover", ["#d8d8e0", "scoop"]], ["Crater Cutter", ["#b8c6ff", "saw"]], ["Meteor Drill", ["#8a6f5a", "cone"]], ["Photon Laser", ["#5cf0ff", "laser"]], ["Orbital Borer", ["#f6ffb0", "bigcone"]], ["Star Crawler", ["#ffffff", "plasma"]]],
     loot: [["Moon Rock", "round", "#d8d8e8", 1], ["Comet Shard", "diamond", "#5cf0ff", 2], ["Alien Vial", "potion", "#8dff6a", 5], ["Star Shard", "star", "#fff27a", 15], ["Rover Idol", "idol", "#c0c8ff", 50]] },
   { name: "Crystal Abyss", sky: ["#1a0b2e", "#3d1b6b"], cloud: "#4a2a7a", ground: ["#5a3b8f", "#45296f", "#301c52"], speck: ["#140a26", "#ff9cf7"],
+    tools: [["Prism Pick", "pick"], ["Shard Hammer", "jack"], ["Geode Cart", ["#ffa3d1", "scoop"]], ["Crystal Cutter", ["#b46bff", "saw"]], ["Resonance Drill", ["#9cf6ff", "cone"]], ["Prism Laser", ["#ff5ce1", "laser"]], ["Diamond Dozer", ["#e8fbff", "bigcone"]], ["Crystal Titan", ["#ff2d6f", "vortex"]]],
     loot: [["Amethyst", "diamond", "#b46bff", 1], ["Opal", "round", "#ffeef7", 2], ["Prism Vial", "potion", "#9cf6ff", 5], ["Heart Crystal", "heart", "#ff2d6f", 15], ["Crystal Crown", "crown", "#ff5ce1", 50]] },
   { name: "The Void", sky: ["#000000", "#0b0716"], cloud: "#1a1426", ground: ["#2a2240", "#1c1630", "#100c1e"], speck: ["#05030a", "#a78bfa"],
+    tools: [["Void Pick", "pick"], ["Rift Hammer", "jack"], ["Shadow Crawler", ["#4a3a6a", "scoop"]], ["Rift Saw", ["#6f6a8a", "saw"]], ["Nebula Drill", ["#c77dff", "cone"]], ["Singularity Laser", ["#4cc9f0", "laser"]], ["Plasma Bore", ["#9b5cff", "plasma"]], ["Star Eater", ["#2a2340", "vortex"]]],
     loot: [["Echo Stone", "round", "#6f6a8a", 1], ["Nebula Pearl", "round", "#c77dff", 2], ["Void Vial", "potion", "#3a0ca3", 5], ["Dark Star", "star", "#4cc9f0", 15], ["Cosmic Egg", "idol", "#ff9e00", 50]] },
 ];
-const EQUIP = [
-  { name: "Shovel", cap: 5, kind: "foot", tool: "shovel" },
-  { name: "Pickaxe", cap: 12, kind: "foot", tool: "pick" },
-  { name: "Jackhammer", cap: 22, kind: "foot", tool: "jack" },
-  { name: "Mine Cart", cap: 35, body: "#8a8f99", tool: "scoop" },
-  { name: "Saw Tank", cap: 50, body: "#38c936", tool: "saw" },
-  { name: "Red Dozer", cap: 70, body: "#e23b2e", tool: "cone" },
-  { name: "Steam Borer", cap: 100, body: "#c9a227", tool: "bigcone" },
-  { name: "Sand Crawler", cap: 140, body: "#e0b060", tool: "saw" },
-  { name: "Frost Auger", cap: 190, body: "#7fd6ff", tool: "cone" },
-  { name: "Magma Mole", cap: 250, body: "#ff6a1a", tool: "bigcone" },
-  { name: "Laser Crawler", cap: 320, body: "#2bb5c9", tool: "laser" },
-  { name: "Lunar Rover", cap: 400, body: "#d8d8e0", tool: "laser" },
-  { name: "Crystal Cutter", cap: 490, body: "#b46bff", tool: "saw" },
-  { name: "Plasma Bore", cap: 590, body: "#9b5cff", tool: "plasma" },
-  { name: "Void Walker", cap: 700, body: "#4a3a7a", tool: "plasma" },
-  { name: "Star Eater", cap: Infinity, body: "#2a2340", tool: "vortex" },
-];
-const layerSize = d => BAL.L0 * Math.pow(BAL.hard, d);
-const pixVal = () => 1; // a dug pixel is always worth one Pixel
-const prevCap = k => k ? EQUIP[k - 1].cap : 0;
-const eqPower = k => Math.pow(BAL.eqGrow, k);
-const eqCost = k => BAL.eqC0 * Math.pow(BAL.eqCg, k - 1);
-
+// Multipliers persist between worlds; each world raises their level cap by `per`.
 const MULTS = [
-  { id: "coffee", name: "Strong Coffee", icon: "cup", desc: l => `DIG SPEED X${fmt2(Math.pow(1.1, l))}`, cost: l => 40 * Math.pow(1.6, l) },
-  { id: "moles", name: "Helper Moles", icon: "mole", desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}`, cost: l => 150 * Math.pow(1.5, l) },
-  { id: "sharp", name: "Sharp Edges", icon: "pick", desc: l => `CLICK POWER X${l + 1}`, cost: l => 25 * Math.pow(1.6, l) },
-  { id: "luck", name: "Lucky Charm", icon: "clover", max: 20, desc: l => `TREASURE CHANCE X${fmt2(1 + l * .15)}`, cost: l => 300 * Math.pow(1.9, l) },
-  { id: "apprais", name: "Appraiser", icon: "glass", desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}`, cost: l => 500 * Math.pow(1.7, l) },
-  { id: "shift", name: "Night Shift", icon: "moon", max: 10, desc: l => `EARN ${l * 10}% WHILE AWAY`, cost: l => 2000 * Math.pow(2.5, l) },
-  { id: "turbo", name: "Turbo Engine", icon: "bolt", max: 15, needVeh: true, desc: l => `VEHICLE SPEED X${fmt2(Math.pow(1.4, l))}`, cost: l => 5e4 * Math.pow(25, l) },
+  { id: "coffee", name: "Strong Coffee", icon: "cup", per: 10, base: 30, grow: 2, desc: l => `DIG SPEED X${fmt2(Math.pow(1.15, l))}` },
+  { id: "moles", name: "Helper Moles", icon: "mole", per: 10, base: 100, grow: 2, desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}` },
+  { id: "sharp", name: "Sharp Edges", icon: "pick", per: 10, base: 20, grow: 2, desc: l => `CLICK POWER X${fmt2(1 + l * .5)}` },
+  { id: "luck", name: "Lucky Charm", icon: "clover", per: 5, base: 200, grow: 2.2, desc: l => `TREASURE X${fmt2(1 + l * .15)} AS OFTEN` },
+  { id: "apprais", name: "Appraiser", icon: "glass", per: 10, base: 300, grow: 2, desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}` },
+  { id: "shift", name: "Night Shift", icon: "moon", per: 2, base: 1000, grow: 3, desc: l => `EARN ${l * 5}% WHILE AWAY` },
 ];
 
 // ================================================================ state
 let S;
 function freshState() {
-  return { px: 0, total: 0, depth: 0, prog: 0, eq: 0, m: { coffee: 0, moles: 0, sharp: 0, luck: 0, apprais: 0, shift: 0, turbo: 0 },
-    inv: {}, found: {}, sold: 0, sound: true, stats: { time: 0, clicks: 0, treasures: 0, golden: 0 }, last: Date.now() };
+  return { px: 0, total: 0, w: 0, t: 0, dist: 0, m: { coffee: 0, moles: 0, sharp: 0, luck: 0, apprais: 0, shift: 0 },
+    inv: {}, found: {}, sound: true, won: false, stats: { time: 0, clicks: 0, treasures: 0, golden: 0 }, last: Date.now() };
 }
 function load() {
   try {
@@ -104,18 +90,22 @@ function load() {
 }
 function save() { S.last = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
 
-const worldOf = d => Math.min(WORLDS.length - 1, Math.floor(d / LAYERS_PER_WORLD));
-const W = () => WORLDS[worldOf(S.depth)];
-const cap = () => EQUIP[S.eq].cap;
-const blocked = () => S.depth >= cap();
+const W = () => WORLDS[S.w];
+const tool = (w = S.w, t = S.t) => WORLDS[w].tools[t];
+const worldScale = (w = S.w) => Math.pow(BAL.worldVal, w);
+const priceScale = (w = S.w) => Math.pow(BAL.worldVal * BAL.worldHard, w);
+const toolCost = t => BAL.toolC0 * Math.pow(BAL.toolCg + BAL.toolCgW * S.w, t - 1) * priceScale();
+const portalCost = () => toolCost(TOOLS - 1) * BAL.portalMul;
+const multCap = m => m.per * (S.w + 1);
+const multCost = m => m.base * Math.pow(m.grow, S.m[m.id] - m.per * S.w) * priceScale();
 let frenzy = 0;
-function power() {
-  let p = eqPower(S.eq) * Math.pow(1.1, S.m.coffee) * (1 + S.m.moles * .1);
-  if (S.eq >= 3) p *= Math.pow(1.4, S.m.turbo);
-  return p * (frenzy > 0 ? 7 : 1);
+// dirt pixels per second (before the world's pixel value)
+function power(noFrenzy) {
+  const p = Math.pow(BAL.toolGrow, S.t) * Math.pow(1.15, S.m.coffee) * (1 + S.m.moles * .1);
+  return p * (frenzy > 0 && !noFrenzy ? 7 : 1);
 }
-const clickPower = () => Math.max(1, power() * BAL.clickFrac) * (1 + S.m.sharp);
-const treasureMult = () => 1 + S.m.apprais * .3;
+const clickPower = () => Math.max(1, power() * BAL.clickFrac) * (1 + S.m.sharp * .5);
+const luckMult = () => 1 + S.m.luck * .15;
 
 // ================================================================ treasure placement
 function hash(x, y, s) {
@@ -123,80 +113,76 @@ function hash(x, y, s) {
   h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
-const RARITY = [.5, .27, .14, .07, .02];
-// the treasure (if any) buried in layer d: {i, x (0..1)}
-function treasureAt(d) {
-  if (d < 1 || hash(d, 0, 77) >= Math.min(.9, BAL.tChance * (1 + S.m.luck * .15))) return null;
-  let r = hash(d, 1, 77), i = 0;
+const RARITY = [.5, .27, .14, .07, .02], SEG = 40;
+// digger speed in scene pixels/sec (visual only; income comes from power)
+const digSpeed = () => (10 + S.t * 1.5) * (frenzy > 0 ? 2 : 1);
+// treasure buried in segment `seg` of the current layer: {i, x} or null
+function treasureAt(seg) {
+  const k = S.w * 100 + S.t, chance = Math.min(.9, SEG / (10 + S.t * 1.5) / BAL.tEvery * luckMult());
+  if (seg < 1 || hash(seg, k, 77) >= chance) return null;
+  let r = hash(seg, k, 78), i = 0;
   while (i < 4 && r > RARITY[i]) { r -= RARITY[i]; i++; }
-  return { i, x: .1 + hash(d, 2, 77) * .8 };
+  return { i, x: seg * SEG + 6 + hash(seg, k, 79) * (SEG - 12) };
 }
-const treasureValue = (d, i) => BAL.tLayers * layerSize(d) * pixVal(d) * WORLDS[worldOf(d)].loot[i][3] * treasureMult();
+const treasureValue = i => BAL.tSec * power(true) * worldScale() * W().loot[i][3] * (1 + S.m.apprais * .3);
 
 // ================================================================ game actions
 const fx = [], pops = [];
-let shake = 0, digAnim = 0, earnedFrame = 0, ppsShown = 0, golden = null, goldenTimer = 40, goldenMsg = null;
+let shake = 0, digAnim = 0, earnedFrame = 0, ppsShown = 0, golden = null, goldenTimer = 40, goldenMsg = null, dropAnim = 0;
 
 function earn(v) { S.px += v; S.total += v; earnedFrame += v; }
-// dig `amount` dirt pixels through the current layer(s)
-function dig(amount) {
-  let guard = 0;
-  while (amount > 1e-12 && !blocked() && guard++ < 400) {
-    const size = layerSize(S.depth), take = Math.min(size - S.prog, amount);
-    const t = treasureAt(S.depth), f0 = S.prog / size;
-    S.prog += take; amount -= take;
-    earn(take * pixVal(S.depth));
-    if (t && f0 <= t.x && S.prog / size > t.x) collect(S.depth, t.i);
-    if (S.prog >= size * (1 - 1e-9)) { S.prog = 0; layerDone(); }
+// move the digger forward `d` scene pixels, collecting any treasure passed
+function advance(d) {
+  const from = S.dist, to = from + d;
+  for (let seg = Math.floor(from / SEG); seg <= Math.floor(to / SEG); seg++) {
+    const t = treasureAt(seg);
+    if (t && t.x > from && t.x <= to) collect(t.i);
   }
-  if (amount > 0) earn(amount * pixVal(S.depth)); // stuck at the cap: still scraping pixels
+  S.dist = to;
 }
-function layerDone() {
-  S.depth++;
-  if (S.depth % LAYERS_PER_WORLD === 0 && S.depth / LAYERS_PER_WORLD < WORLDS.length) {
-    const w = W();
-    sfx("portal"); shake = 8;
-    showModal("NEW WORLD!", [`You broke through into ${w.name}.`, "New ground to dig and new treasures to find."]);
-  } else if (S.depth % 10 === 0) sfx("layer");
-  if (blocked() && S.eq + 1 < EQUIP.length) toast("TOO HARD! BUY BETTER EQUIPMENT", C.red);
-}
-function collect(d, i) {
-  const wi = worldOf(d), key = wi + ":" + i, item = WORLDS[wi].loot[i], v = treasureValue(d, i);
+function collect(i) {
+  const key = S.w + ":" + i, item = W().loot[i], v = treasureValue(i);
   const st = S.inv[key] || (S.inv[key] = { n: 0, v: 0 });
   st.n++; st.v += v; S.stats.treasures++;
   if (!S.found[key]) { S.found[key] = 1; toast("NEW TREASURE: " + item[0], item[2]); }
   else toast("FOUND " + item[0], item[2]);
-  pops.push({ x: frontX(), y: gyScreen(S.depth) - 16, gem: [item[1], item[2]], txt: "", c: item[2], l: 1.4 });
+  pops.push({ x: FRONT, y: floorY() - 30, gem: [item[1], item[2]], txt: "", c: item[2], l: 1.4 });
   sfx(i >= 3 ? "rare" : "ore");
 }
 function clickDig() {
   const p = clickPower();
-  dig(p); S.stats.clicks++; digAnim = 1;
-  sfx(blocked() ? "clank" : "hit");
-  const x = frontX(), y = gyScreen(S.depth) + 2;
-  debris(x, y, groundColor(S.depth), 4);
-  if (Math.random() < .35) pops.push({ x: x + (Math.random() - .5) * 16, y: y - 18, txt: "+" + fmt(p * pixVal(S.depth)), c: "#ffffff", l: .8 });
+  earn(p * worldScale()); advance(1.5); S.stats.clicks++; digAnim = 1;
+  sfx("hit");
+  debris(FRONT, floorY() - 6, groundColor(S.t), 4);
+  if (Math.random() < .35) pops.push({ x: FRONT + (Math.random() - .5) * 16, y: floorY() - 34, txt: "+" + fmt(p * worldScale()), c: "#ffffff", l: .8 });
 }
 function sell(key) {
   const st = S.inv[key]; if (!st) return;
-  earn(st.v); S.sold += st.v; delete S.inv[key]; sfx("sell");
+  earn(st.v); delete S.inv[key]; sfx("sell");
 }
 function sellAll() {
   let t = 0; for (const k in S.inv) t += S.inv[k].v;
   if (!t) return;
-  earn(t); S.sold += t; S.inv = {}; sfx("sell"); toast("SOLD FOR $" + fmt(t), C.yellow);
+  earn(t); S.inv = {}; sfx("sell"); toast("SOLD FOR $" + fmt(t), C.yellow);
 }
 const invTotal = () => { let t = 0; for (const k in S.inv) t += S.inv[k].v; return t; };
-function buyEquip() {
-  const k = S.eq + 1; if (k >= EQUIP.length) return;
-  const c = eqCost(k); if (S.px < c) return;
-  S.px -= c; S.eq = k; sfx("buy"); shake = 4;
-  toast("NEW EQUIPMENT: " + EQUIP[k].name, C.yellow);
+function buyTool() {
+  if (S.t + 1 >= TOOLS) return;
+  const c = toolCost(S.t + 1); if (S.px < c) return;
+  S.px -= c; S.t++; S.dist = 0; dropAnim = 1; sfx("buy"); shake = 4;
+  toast(`${tool()[0]}! ONE LAYER DEEPER`, C.yellow);
+}
+function openPortal() {
+  if (S.t + 1 < TOOLS || S.w + 1 >= WORLDS.length) return;
+  const c = portalCost(); if (S.px < c) return;
+  S.w++; S.t = 0; S.dist = 0; S.px = 0; S.inv = {};
+  sfx("portal"); shake = 10; camY = targetCamY();
+  showModal("NEW WORLD!", [`Welcome to ${W().name}.`, "Your tools and pixels are gone, but your multipliers stay, and their level caps went up.", `Collect all 8 ${W().name.split(" ").pop()} tools to open the next portal.`]);
 }
 function buyMult(id) {
-  const m = MULTS.find(m => m.id === id), l = S.m[id];
-  if ((m.max && l >= m.max) || (m.needVeh && S.eq < 3)) return;
-  const c = m.cost(l); if (S.px < c) return;
+  const m = MULTS.find(m => m.id === id);
+  if (S.m[id] >= multCap(m)) return;
+  const c = multCost(m); if (S.px < c) return;
   S.px -= c; S.m[id]++; sfx("buy");
 }
 function clickGolden() {
@@ -208,20 +194,20 @@ function clickGolden() {
 
 // ================================================================ effects + sound
 function debris(x, y, c, n) {
-  for (let i = 0; i < n; i++) fx.push({ x, y, vx: (Math.random() - .5) * 80, vy: -Math.random() * 80, c: Math.random() < .3 ? W().speck[1] : c, l: .3 + Math.random() * .4 });
+  for (let i = 0; i < n; i++) fx.push({ x, y, vx: (Math.random() - .3) * 80, vy: -Math.random() * 80, c: Math.random() < .3 ? W().speck[1] : c, l: .3 + Math.random() * .4 });
 }
 let actx = null;
 function sfx(type) {
   if (!S.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const notes = { hit: [[150 + Math.random() * 80, .025]], clank: [[90, .03]], layer: [[500, .04], [700, .05]], ore: [[660, .05], [880, .07]], click: [[900, .02]],
+    const notes = { hit: [[150 + Math.random() * 80, .025]], ore: [[660, .05], [880, .07]], click: [[900, .02]],
       rare: [[660, .06], [880, .06], [1320, .1]], portal: [[440, .1], [554, .1], [659, .1], [880, .25]], buy: [[520, .04], [780, .06]], sell: [[880, .04], [1175, .04], [1568, .08]] }[type];
     let t = actx.currentTime;
     for (const [f, d] of notes) {
       const o = actx.createOscillator(), g = actx.createGain();
       o.type = "square"; o.frequency.value = f;
-      g.gain.setValueAtTime(type === "hit" || type === "click" || type === "clank" ? .025 : .045, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      g.gain.setValueAtTime(type === "hit" || type === "click" ? .025 : .045, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
       o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d * .8;
     }
   } catch (e) {}
@@ -416,72 +402,72 @@ function gem(shape, col, x, y) {
 }
 
 // ================================================================ scene rendering
-let camY = PIT0 - 100;
+let camY = LB - 124;
 function mix(a, b, t) {
   const pa = parseInt(a.slice(1, 7), 16), pb = parseInt(b.slice(1, 7), 16);
   const r = (pa >> 16) * (1 - t) + (pb >> 16) * t, g = ((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t, bl = (pa & 255) * (1 - t) + (pb & 255) * t;
   return "#" + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
 }
-function groundColor(d) {
-  const w = WORLDS[worldOf(d)], f = Math.min(1, (d % LAYERS_PER_WORLD) / LAYERS_PER_WORLD) * 2;
-  const i = Math.min(1, Math.floor(f));
-  return mix(w.ground[i], w.ground[i + 1], Math.min(1, f - i));
+// ground colour of layer k in the current world
+function groundColor(k) {
+  const g = W().ground, f = Math.min(1, k / TOOLS) * 2, i = Math.min(1, Math.floor(f));
+  return mix(g[i], g[i + 1], Math.min(1, f - i));
 }
-const gyScreen = d => PIT0 + d * ROW - camY;
-const digDir = () => S.depth % 2 === 0 ? 1 : -1;
-function frontX() { const f = S.prog / layerSize(S.depth); return digDir() > 0 ? f * VW : VW - f * VW; }
+const pitColor = k => mix(groundColor(k), C.pit, .72);
+const targetCamY = () => (S.t + 1) * LB - 124;
+const floorY = () => (S.t + 1) * LB - Math.round(camY);
 
 function drawClouds(now) {
-  const w = W(), base = -camY;
-  if (base < HUD_H) return;
-  cx.fillStyle = w.cloud;
+  const top = -camY;
+  if (top < HUD_H) return;
+  cx.fillStyle = W().cloud;
   for (let i = 0; i < 3; i++) {
-    const x = ((now / (90 + i * 40) + i * 70) % (VW + 40)) - 30, y = base - 36 - i * 13 + (i === 1 ? 6 : 0);
+    const x = VW + 30 - ((now / (90 + i * 40) + S.dist * .3 + i * 70) % (VW + 60)), y = top - 26 - i * 13 + (i === 1 ? 6 : 0);
     cx.fillRect(Math.round(x), y, 18, 4); cx.fillRect(Math.round(x) + 4, y - 3, 9, 3);
   }
 }
 function drawScene(now) {
-  const w = W();
-  const g = cx.createLinearGradient(0, 0, 0, VH);
-  g.addColorStop(0, w.sky[0]); g.addColorStop(1, w.sky[1]);
-  cx.fillStyle = g; cx.fillRect(0, 0, VW, VH);
+  const w = W(), sky = cx.createLinearGradient(0, 0, 0, VH);
+  sky.addColorStop(0, w.sky[0]); sky.addColorStop(1, w.sky[1]);
+  cx.fillStyle = sky; cx.fillRect(0, 0, VW, VH);
   drawClouds(now);
-  // open pit: surface band then every dug layer, tinted by what it used to be
-  const top = -camY;
-  cx.fillStyle = mix(groundColor(0), C.pit, .85); cx.fillRect(0, top, VW, PIT0);
-  cx.fillStyle = mix(groundColor(0), "#000000", .3); cx.fillRect(0, top, VW, 1);
-  const first = Math.max(0, Math.floor((camY - PIT0) / ROW)), last = Math.ceil((camY + VH - PIT0) / ROW);
-  for (let r = first; r <= last; r++) {
-    const y = gyScreen(r);
-    if (r < S.depth) {
-      cx.fillStyle = mix(groundColor(r), C.pit, r % 10 === 9 ? .62 : .78); cx.fillRect(0, y, VW, ROW);
-    } else {
-      cx.fillStyle = groundColor(r); cx.fillRect(0, y, VW, ROW);
+  const ox = Math.floor(S.dist), sub = 0;
+  const r0 = Math.max(0, Math.floor(camY / 4)), r1 = Math.ceil((camY + VH) / 4);
+  for (let r = r0; r <= r1; r++) {
+    const y = r * 4 - Math.round(camY), k = Math.floor(r * 4 / LB), inBand = (r * 4) % LB;
+    if (k < S.t) {
+      // layers already dug: open tunnels, each band edged so the layers read clearly
+      cx.fillStyle = pitColor(k); cx.fillRect(0, y, VW, 4);
+      if (inBand === 0) { cx.fillStyle = mix(groundColor(k), "#000000", .25); cx.fillRect(0, y, VW, 2); }
+      if (inBand === LB - 4) { cx.fillStyle = mix(pitColor(k), "#000000", .18); cx.fillRect(0, y + 2, VW, 2); }
+      continue;
+    }
+    cx.fillStyle = groundColor(k); cx.fillRect(0, y, VW, 4);
+    if (k === S.t) { cx.fillStyle = pitColor(k); cx.fillRect(0, y, FRONT, 4); }
+    // specks scroll with the dig distance
+    const ws = w.speck;
+    for (let c = -1; c <= VW / 4 + 1; c++) {
+      const wx = ox + c * 4, cell = Math.floor(wx / 4), x = c * 4 - (ox % 4);
+      if (k === S.t && x < FRONT) continue;
+      const h = hash(cell, r, 3 + S.w);
+      if (h < .16) { cx.fillStyle = ws[0]; cx.fillRect(x, y + 1, 3, 1); if (h < .07) { cx.fillStyle = ws[1]; cx.fillRect(x + (h < .035 ? 0 : 2), y, 1, 1); } }
     }
   }
-  // the current layer: dug part opens up
-  const fx0 = frontX(), cy = gyScreen(S.depth);
-  cx.fillStyle = mix(groundColor(S.depth), C.pit, .78);
-  if (digDir() > 0) cx.fillRect(0, cy, Math.round(fx0), ROW); else cx.fillRect(Math.round(fx0), cy, VW - Math.round(fx0), ROW);
-  // specks in undug ground
-  for (let r = Math.max(S.depth, first); r <= last; r++) {
-    const y = gyScreen(r), ws = WORLDS[worldOf(r)];
-    for (let c = 0; c < VW / 4; c++) {
-      const x = c * 4;
-      if (r === S.depth && (digDir() > 0 ? x < fx0 : x + 4 > fx0)) continue;
-      const h = hash(c, r, 3);
-      if (h < .16) { cx.fillStyle = ws.speck[0]; cx.fillRect(x, y + 1, 3, 1); if (h < .07) { cx.fillStyle = ws.speck[1]; cx.fillRect(x + (h < .035 ? 0 : 2), y, 1, 1); } }
-    }
-  }
-  // buried treasure
-  for (let r = Math.max(S.depth, first); r <= last + 2; r++) {
-    const t = treasureAt(r);
-    if (!t) continue;
-    const x = (r % 2 === 0 ? t.x : 1 - t.x) * VW;
-    if (r === S.depth && S.prog / layerSize(r) > t.x) continue;
-    const it = WORLDS[worldOf(r)].loot[t.i];
-    gem(it[1], it[2], x - 3, gyScreen(r) - 1);
-    if (t.i >= 2 && (now / 200 + r) % 8 < 1) { cx.fillStyle = "#ffffff"; cx.fillRect(Math.round(x), gyScreen(r) - 3, 1, 3); cx.fillRect(Math.round(x) - 1, gyScreen(r) - 2, 3, 1); }
+  // tunnel floor rubble + the rough digging face
+  const fy = floorY();
+  cx.fillStyle = mix(pitColor(S.t), "#000000", .2);
+  cx.fillRect(0, fy - 2, FRONT, 2);
+  for (let c = 0; c < FRONT / 4; c++) { const wx = ox + c * 4 - FRONT; if (hash(Math.floor(wx / 4), 9, 5) < .3) cx.fillRect(c * 4 - (ox % 4), fy - 3, 2, 1); }
+  cx.fillStyle = mix(groundColor(S.t), "#000000", .35);
+  for (let yy = 0; yy < LB; yy += 2) cx.fillRect(FRONT + Math.round(hash(yy, Math.floor(S.dist), 1) * 2), fy - LB + yy, 1, 2);
+  // treasure buried ahead in this layer
+  for (let seg = Math.floor(S.dist / SEG); seg <= Math.floor((S.dist + VW) / SEG); seg++) {
+    const t = treasureAt(seg);
+    if (!t || t.x <= S.dist) continue;
+    const x = FRONT + t.x - S.dist, it = w.loot[t.i];
+    if (x > VW + 4) continue;
+    gem(it[1], it[2], x - 3, fy - 15);
+    if (t.i >= 2 && (now / 200 + seg) % 8 < 1) { cx.fillStyle = "#ffffff"; cx.fillRect(Math.round(x), fy - 17, 1, 3); cx.fillRect(Math.round(x) - 1, fy - 16, 3, 1); }
   }
   drawDigger(now);
   for (const p of fx) { cx.fillStyle = p.c; cx.fillRect(p.x | 0, p.y | 0, 2, 2); }
@@ -496,16 +482,9 @@ function drawScene(now) {
     cx.fillStyle = "#000"; cx.fillRect(golden.x - 4, golden.y - 4, 9, 9);
     cx.fillStyle = s ? "#ffe33a" : "#fff59a"; cx.fillRect(golden.x - 3, golden.y - 3, 7, 7);
     cx.fillStyle = "#ffffff"; cx.fillRect(golden.x - 2, golden.y - 2, 2, 2);
-    if (s) { cx.fillStyle = "#ffffff"; cx.fillRect(golden.x - 6, golden.y, 2, 1); cx.fillRect(golden.x + 5, golden.y, 2, 1); cx.fillRect(golden.x, golden.y - 6, 1, 2); cx.fillRect(golden.x, golden.y + 5, 1, 2); }
+    if (s) { cx.fillRect(golden.x - 6, golden.y, 2, 1); cx.fillRect(golden.x + 5, golden.y, 2, 1); cx.fillRect(golden.x, golden.y - 6, 1, 2); cx.fillRect(golden.x, golden.y + 5, 1, 2); }
   }
-  if (blocked() && S.eq + 1 < EQUIP.length && (now / 400 | 0) % 2) {
-    const y = VH - 22;
-    cx.fillStyle = "#000000"; cx.fillRect(10, y, VW - 20, 16);
-    cx.fillStyle = C.red; cx.fillRect(11, y + 1, VW - 22, 14);
-    txt("TOO HARD TO DIG!", VW / 2, y + 2, "#ffffff", 1, "center");
-    txt("BUY BETTER EQUIPMENT", VW / 2, y + 9, "#ffffff", 1, "center");
-  }
-  if (frenzy > 0) { txtS("FRENZY X7 " + Math.ceil(frenzy) + "S", VW / 2, HUD_H + 3, C.yellow, 1, "center"); }
+  if (frenzy > 0) txtS("FRENZY X7 " + Math.ceil(frenzy) + "S", VW / 2, HUD_H + 3, C.yellow, 1, "center");
   else if (goldenMsg) txtS(goldenMsg.txt, VW / 2, HUD_H + 3, C.yellow, 1, "center");
   drawHud();
 }
@@ -515,28 +494,27 @@ function hudBox(x, y, w, label, val, fill, border, ink) {
   txt(label, x + 3, y + 3, ink);
   txt(val, x + w - 3, y + 3, ink, 1, "right");
 }
+const depthNow = () => S.w * TOOLS + S.t;
 function drawHud() {
   hudBox(1, 1, 71, "PPS", fmt(ppsShown), C.hud, C.hudHi, "#ffffff");
-  hudBox(73, 1, 70, "DEPTH", String(S.depth), C.hud, C.hudHi, "#ffffff");
+  hudBox(73, 1, 70, "DEPTH", String(depthNow()), C.hud, C.hudHi, "#ffffff");
   hudBox(1, 12, 142, "PIXELS", fmtC(S.px), C.hud, C.hudHi, "#ffffff");
 }
 
 // ---------------------------------------------------------------- miner + vehicles
+// draws tool spec (foot tool name or [body, vehicle tool]) with feet at the origin, facing right
+function drawTool(spec, now) {
+  if (typeof spec === "string") drawMiner(spec, now); else drawVehicle({ body: spec[0], tool: spec[1] }, now);
+}
+const toolWidth = spec => typeof spec === "string" ? 12 : 31;
 function drawDigger(now) {
-  const e = EQUIP[S.eq], dir = digDir(), feet = gyScreen(S.depth) + ROW;
-  const w = e.kind === "foot" ? 12 : 31;
-  let x = dir > 0 ? frontX() - w + 2 : frontX() - 2;
-  x = Math.max(-2, Math.min(VW - w + 2, x));
-  cx.save();
-  if (dir > 0) cx.translate(Math.round(x), feet);
-  else { cx.translate(Math.round(x + w), feet); cx.scale(-1, 1); }
-  if (e.kind === "foot") drawMiner(e.tool, now); else drawVehicle(e, now);
-  cx.restore();
+  const spec = tool()[1];
+  cx.save(); cx.translate(FRONT - toolWidth(spec) + 2, Math.round(floorY())); drawTool(spec, now); cx.restore();
 }
 function px(x, y, w, h, c) { cx.fillStyle = c; cx.fillRect(x, y, w, h); }
 // origin = feet, facing right
 function drawMiner(tool, now) {
-  const step = blocked() ? 0 : ((now / 160 | 0) % 2), sw = digAnim;
+  const step = false ? 0 : ((now / 160 | 0) % 2), sw = digAnim;
   px(2, -3, 3, 3, "#3a2a1a"); px(6, -3 + step, 3, 3 - step, "#3a2a1a");            // boots
   px(2, -8, 7, 5, "#2f5fd0"); px(3, -8, 1, 2, "#5f8fff");                          // overalls
   px(3, -11, 5, 3, "#f2c8a0"); px(6, -10, 1, 1, "#111");                            // face
@@ -560,7 +538,7 @@ function circle(cxp, cyp, r, col) {
   for (let y = -r; y <= r; y++) { const w = Math.round(Math.sqrt(r * r - y * y + r * .8)); cx.fillRect(cxp - w, cyp + y, w * 2 + 1, 1); }
 }
 function drawVehicle(e, now) {
-  const run = !blocked(), t = now / 1000, body = e.body, dark = mix(body, "#000000", .4), light = mix(body, "#ffffff", .45);
+  const run = !false, t = now / 1000, body = e.body, dark = mix(body, "#000000", .4), light = mix(body, "#ffffff", .45);
   const bob = run ? ((now / 120 | 0) % 2) : 0;
   // tracks
   px(1, -7, 21, 7, "#111111"); px(0, -6, 23, 5, "#111111");
@@ -613,7 +591,7 @@ function drawVehicle(e, now) {
 
 // ================================================================ panel UI (immediate mode)
 let regions = [], mouse = null, mouseDown = false, tab = "equip", confirmKey = null, tip = null, modal = null, toastMsg = null;
-const TABS = [["equip", "tools", "EQUIPMENT: MINE DEEPER"], ["mult", "bolt", "MULTIPLIERS: MINE QUICKER"], ["treasure", "gem", "TREASURE: SELL HERE"], ["more", "gear", "COLLECTION & SETTINGS"]];
+const TABS = [["equip", "tools", "EQUIPMENT: DIG DEEPER"], ["mult", "bolt", "MULTIPLIERS: MINE QUICKER"], ["treasure", "gem", "TREASURE: SELL HERE"], ["more", "gear", "COLLECTION & SETTINGS"]];
 const inR = (x, y, w, h) => mouse && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
 function region(x, y, w, h, fn, tipText) { regions.push({ x, y, w, h, fn }); if (tipText && inR(x, y, w, h)) tip = tipText; }
 // purple menu row; hovered rows turn yellow like the original's selection
@@ -632,78 +610,92 @@ function drawPanel(now) {
   panelBg(X, Y, PW, 172);
   // header mirrors the in-game HUD, in the menu's yellow
   hudBox(X + 2, Y + 2, 70, "PPS", fmt(ppsShown), C.yellow, C.black, C.black);
-  hudBox(X + 73, Y + 2, 69, "DEPTH", String(S.depth), C.yellow, C.black, C.black);
+  hudBox(X + 73, Y + 2, 69, "DEPTH", String(depthNow()), C.yellow, C.black, C.black);
   hudBox(X + 2, Y + 13, 140, "PIXELS", fmtC(S.px), C.yellow, C.black, C.black);
-  // tabs
   const tY = Y + 25;
   TABS.forEach(([id, ic, label], i) => {
     const x = X + 2 + i * 35, r = item(x, tY, 35, 15, () => { tab = id; confirmKey = null; sfx("click"); }, { on: tab === id, tip: label });
     icon(ic, x + 14, tY + 4 + r.d);
   });
-  const cY = Y + 42;
-  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, cY, PW - 4, 112, now);
-  // footer: world progress
-  const fY = Y + 157, w = W(), wi = worldOf(S.depth), into = S.depth - wi * LAYERS_PER_WORLD;
-  txt(w.name, X + 4, fY + 1, C.yellow);
-  txt(wi + 1 < WORLDS.length ? `${into}/100` : "ENDLESS", X + PW - 4, fY + 1, "#ffffff", 1, "right");
+  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, Y + 42, PW - 4, 112, now);
+  // footer: world + tool progress
+  const fY = Y + 157;
+  txt(`${S.w + 1}. ${W().name}`, X + 4, fY + 1, C.yellow);
+  txt(`${S.t + 1}/${TOOLS}`, X + PW - 4, fY + 1, "#ffffff", 1, "right");
   cx.fillStyle = C.purpleLo; cx.fillRect(X + 3, fY + 8, PW - 6, 5);
-  cx.fillStyle = C.yellow; cx.fillRect(X + 4, fY + 9, Math.round((PW - 8) * Math.min(1, into / 100)), 3);
-  region(X + 2, fY, PW - 4, 14, null, wi + 1 < WORLDS.length ? `NEXT WORLD AT DEPTH ${(wi + 1) * 100}` : "YOU REACHED THE VOID");
+  for (let i = 0; i < TOOLS; i++) { cx.fillStyle = i <= S.t ? C.yellow : C.purple2; cx.fillRect(X + 4 + i * 17, fY + 9, 16, 3); }
+  region(X + 2, fY, PW - 4, 14, null, S.t + 1 < TOOLS ? `${TOOLS - S.t - 1} TOOLS LEFT IN THIS WORLD` : S.w + 1 < WORLDS.length ? "PORTAL READY TO BUY" : "LAST WORLD");
+}
+function previewBox(x, y, sel, ground) {
+  cx.fillStyle = sel ? "#e8cc20" : "#00000040"; cx.fillRect(x, y, 38, 48);
+  cx.fillStyle = ground; cx.fillRect(x, y + 40, 38, 8);
 }
 function paneEquip(x, y, w, h, now) {
-  const e = EQUIP[S.eq], nk = S.eq + 1;
+  const cur = tool();
   txt("NOW USING", x + 3, y + 2, C.dim);
-  txt(e.name, x + 3, y + 9, "#ffffff");
-  txt("MAX DEPTH " + (isFinite(e.cap) ? e.cap : "INF"), x + w - 3, y + 9, blocked() ? C.red : C.yellow, 1, "right");
-  if (nk < EQUIP.length) {
-    const ne = EQUIP[nk], c = eqCost(nk), can = S.px >= c;
-    const r = item(x, y + 18, w, 54, buyEquip, { disabled: !can });
-    // preview on a little dirt strip
-    cx.fillStyle = r.sel ? "#e8cc20" : "#00000040"; cx.fillRect(x + 3, y + 21 + r.d, 38, 48);
-    cx.fillStyle = groundColor(ne.cap - 1); cx.fillRect(x + 3, y + 61 + r.d, 38, 8);
-    cx.save(); cx.translate(x + (ne.kind === "foot" ? 15 : 7), y + 61 + r.d);
-    const keep = S.eq; S.eq = nk; if (ne.kind === "foot") drawMiner(ne.tool, now); else drawVehicle(ne, now); S.eq = keep;
-    cx.restore();
-    txt("NEXT", x + 45, y + 22 + r.d, r.sel ? "#5a4a00" : C.dim);
-    txt(ne.name, x + 45, y + 29 + r.d, r.ink);
-    txt("MINE TO " + (isFinite(ne.cap) ? "DEPTH " + ne.cap : "ANY DEPTH"), x + 45, y + 39 + r.d, r.ink);
-    txt(`DIG X${fmt2(eqPower(nk) / eqPower(S.eq))} FASTER`, x + 45, y + 46 + r.d, r.ink);
+  txt(cur[0], x + 3, y + 9, "#ffffff");
+  txt("LAYER " + (S.t + 1), x + w - 3, y + 9, C.yellow, 1, "right");
+  if (S.t + 1 < TOOLS) {
+    const ne = tool(S.w, S.t + 1), c = toolCost(S.t + 1), can = S.px >= c;
+    const r = item(x, y + 18, w, 54, buyTool, { disabled: !can });
+    previewBox(x + 3, y + 21 + r.d, r.sel, groundColor(S.t + 1));
+    cx.save(); cx.translate(x + 3 + Math.round((38 - toolWidth(ne[1])) / 2), y + 61 + r.d); drawTool(ne[1], now); cx.restore();
+    txt("NEXT TOOL", x + 45, y + 22 + r.d, r.sel ? "#5a4a00" : C.dim);
+    txt(ne[0], x + 45, y + 29 + r.d, r.ink);
+    txt("DIG 1 LAYER DEEPER", x + 45, y + 39 + r.d, r.ink);
+    txt(`X${BAL.toolGrow} PIXELS PER SEC`, x + 45, y + 46 + r.d, r.ink);
+    txt("$" + fmt(c), x + w - 4, y + 61 + r.d, can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
+  } else if (S.w + 1 < WORLDS.length) {
+    const nw = WORLDS[S.w + 1], c = portalCost(), can = S.px >= c;
+    const r = item(x, y + 18, w, 54, openPortal, { disabled: !can });
+    previewBox(x + 3, y + 21 + r.d, r.sel, nw.ground[0]);
+    for (let i = 0; i < 4; i++) { const a = now / 300 + i * 1.6; cx.fillStyle = ["#ff7bff", "#9b5cff", "#5cf0ff", "#ffffff"][i]; cx.fillRect(x + 21 + Math.round(Math.cos(a) * (6 + i * 2)), y + 41 + r.d + Math.round(Math.sin(a) * (6 + i * 2)), 3, 3); }
+    txt("OPEN PORTAL TO", x + 45, y + 22 + r.d, r.sel ? "#5a4a00" : C.dim);
+    txt(nw.name, x + 45, y + 29 + r.d, r.ink);
+    txt("RESETS TOOLS & PIXELS", x + 45, y + 39 + r.d, r.ink);
+    txt("RAISES UPGRADE CAPS", x + 45, y + 46 + r.d, r.ink);
     txt("$" + fmt(c), x + w - 4, y + 61 + r.d, can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
   } else {
     item(x, y + 18, w, 54, null, { disabled: true });
-    txt("BEST EQUIPMENT OWNED", x + w / 2, y + 42, "#ffffff", 1, "center");
+    txt("ALL WORLDS CONQUERED!", x + w / 2, y + 38, "#ffffff", 1, "center");
+    txt("KEEP DIGGING FOR TREASURE", x + w / 2, y + 47, C.dim, 1, "center");
   }
-  // tier chain
-  txt("EQUIPMENT " + (S.eq + 1) + "/" + EQUIP.length, x + 3, y + 76, C.dim);
-  EQUIP.forEach((q, i) => {
-    const sx = x + 3 + (i % 8) * 17, sy = y + 84 + Math.floor(i / 8) * 13;
+  // this world's tool chain
+  txt(W().name.split(" ").pop() + " TOOLS", x + 3, y + 76, C.dim);
+  W().tools.forEach((q, i) => {
+    const sx = x + 3 + i * 17, sy = y + 84;
     cx.fillStyle = C.purpleLo; cx.fillRect(sx, sy, 15, 11);
-    cx.fillStyle = i <= S.eq ? C.yellow : i === nk ? ((now / 300 | 0) % 2 ? C.purpleHi : C.purple2) : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 13, 9);
-    if (i <= S.eq) txt(String(i + 1), sx + 8, sy + 3, C.black, 1, "center");
-    region(sx, sy, 15, 11, null, i <= S.eq || i === nk ? `${q.name} - DEPTH ${isFinite(q.cap) ? q.cap : "INF"}` : "???");
+    cx.fillStyle = i <= S.t ? C.yellow : i === S.t + 1 ? ((now / 300 | 0) % 2 ? C.purpleHi : C.purple2) : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 13, 9);
+    if (i <= S.t) txt(String(i + 1), sx + 8, sy + 3, C.black, 1, "center");
+    region(sx, sy, 15, 11, null, i <= S.t + 1 ? q[0] : "???");
+  });
+  // worlds
+  WORLDS.forEach((wd, i) => {
+    const sx = x + 3 + i * 19, sy = y + 99;
+    cx.fillStyle = C.purpleLo; cx.fillRect(sx, sy, 17, 9);
+    cx.fillStyle = i < S.w ? C.green : i === S.w ? C.yellow : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 15, 7);
+    region(sx, sy, 17, 9, null, i <= S.w ? `WORLD ${i + 1}: ${wd.name}` : `WORLD ${i + 1}: ???`);
   });
 }
 function paneMult(x, y, w) {
   MULTS.forEach((m, i) => {
-    const l = S.m[m.id], max = m.max && l >= m.max, locked = m.needVeh && S.eq < 3, c = m.cost(l), can = !max && !locked && S.px >= c;
-    const iy = y + i * 16, r = item(x, iy, w, 15, () => buyMult(m.id), { disabled: !can, tip: locked ? "NEEDS A VEHICLE" : null });
-    icon(m.icon, x + 3, iy + 4 + r.d);
-    txt(m.name, x + 13, iy + 2 + r.d, r.ink);
-    txt("LV" + l, x + 14 + tw(m.name) + 3, iy + 2 + r.d, r.sel ? "#6a5a00" : C.dim);
-    txt(max ? "MAX" : locked ? "LOCKED" : "$" + fmt(c), x + w - 3, iy + 2 + r.d, max ? C.green : can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
-    txt(m.desc(l), x + 13, iy + 9 + r.d, r.sel ? "#4a3a00" : C.dim);
+    const l = S.m[m.id], capL = multCap(m), max = l >= capL, c = multCost(m), can = !max && S.px >= c;
+    const iy = y + i * 18, r = item(x, iy, w, 17, () => buyMult(m.id), { disabled: !can, tip: max ? (S.w + 1 < WORLDS.length ? "CAP RISES IN THE NEXT WORLD" : "MAXED") : null });
+    icon(m.icon, x + 3, iy + 5 + r.d);
+    txt(m.name, x + 13, iy + 3 + r.d, r.ink);
+    txt(`${l}/${capL}`, x + 14 + tw(m.name) + 3, iy + 3 + r.d, r.sel ? "#6a5a00" : C.dim);
+    txt(max ? "MAX" : "$" + fmt(c), x + w - 3, iy + 3 + r.d, max ? C.green : can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
+    txt(m.desc(l), x + 13, iy + 10 + r.d, r.sel ? "#4a3a00" : C.dim);
   });
 }
 function paneTreasure(x, y, w) {
   const tot = invTotal();
-  let r = item(x, y, w, 16, sellAll, { disabled: !tot });
+  const r = item(x, y, w, 16, sellAll, { disabled: !tot });
   icon("coin", x + 4, y + 5 + r.d);
   txt("SELL ALL", x + 15, y + 6 + r.d, r.ink);
   txt("$" + fmt(tot), x + w - 4, y + 6 + r.d, r.sel ? C.black : C.yellow, 1, "right");
   const keys = Object.keys(S.inv).sort((a, b) => S.inv[b].v - S.inv[a].v);
-  if (!keys.length) {
-    ["DIG TO FIND TREASURE.", "THE MINER GRABS IT", "WHEN THE LAYER IS DUG.", "", "DEEPER LAYERS HOLD", "PRICIER LOOT."].forEach((l, i) => txt(l, x + w / 2, y + 26 + i * 8, "#ffffff", 1, "center"));
-  }
+  if (!keys.length) ["TREASURE IS BURIED IN", "YOUR LAYER. DIG INTO IT", "TO PICK IT UP.", "", "DEEPER TOOLS FIND", "PRICIER LOOT."].forEach((l, i) => txt(l, x + w / 2, y + 26 + i * 8, "#ffffff", 1, "center"));
   keys.slice(0, 7).forEach((k, i) => {
     const [wi, ii] = k.split(":").map(Number), it = WORLDS[wi].loot[ii], st = S.inv[k], iy = y + 18 + i * 12;
     const rr = item(x, iy, w, 12, () => sell(k), { tip: "CLICK TO SELL" });
@@ -714,10 +706,9 @@ function paneTreasure(x, y, w) {
   if (keys.length > 7) txt(`+${keys.length - 7} MORE (SELL ALL)`, x + w / 2, y + 104, C.dim, 1, "center");
 }
 function paneMore(x, y, w) {
-  const nFound = Object.keys(S.found).length;
-  txt("COLLECTION " + nFound + "/" + WORLDS.length * 5, x + 3, y + 2, "#ffffff");
+  txt("COLLECTION " + Object.keys(S.found).length + "/" + WORLDS.length * 5, x + 3, y + 2, "#ffffff");
   WORLDS.forEach((wd, wi) => {
-    const iy = y + 10 + wi * 9, seen = S.depth >= wi * LAYERS_PER_WORLD;
+    const iy = y + 10 + wi * 9, seen = wi <= S.w;
     txt(seen ? wd.name.split(" ").pop() : "???", x + 3, iy + 2, seen ? C.dim : "#9a5aaa");
     wd.loot.forEach((it, i) => {
       const sx = x + w - 3 - (5 - i) * 10, f = S.found[wi + ":" + i];
@@ -731,7 +722,7 @@ function paneMore(x, y, w) {
   txt((S.stats.time / 3600).toFixed(1) + "H PLAYED", x + w - 4, y + 81 + r.d, r.sel ? C.black : C.dim, 1, "right");
   const step = confirmKey === "reset2" ? 2 : confirmKey === "reset1" ? 1 : 0;
   r = item(x, y + 93, w, 14, () => {
-    if (step === 2) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = freshState(); confirmKey = null; camY = PIT0 - 100; toast("SAVE DELETED", C.red); }
+    if (step === 2) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = freshState(); confirmKey = null; camY = targetCamY(); toast("SAVE DELETED", C.red); }
     else confirmKey = step ? "reset2" : "reset1";
   }, { on: step > 0 });
   txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 98 + r.d, r.sel ? "#a01010" : "#ff9ab0", 1, "center");
@@ -810,21 +801,19 @@ let lastT = performance.now(), saveAcc = 0;
 function update(dt, now) {
   S.stats.time += dt;
   if (holding && !modal && now >= nextClick) { clickDig(); nextClick = now + BAL.clickGap; }
-  if (!modal) dig(power() * dt);
+  if (!modal) { earn(power() * worldScale() * dt); advance(digSpeed() * dt); }
   ppsShown += (earnedFrame / Math.max(dt, 1e-3) - ppsShown) * Math.min(1, dt * 1.5);
   earnedFrame = 0;
   frenzy = Math.max(0, frenzy - dt);
   if (goldenMsg && (goldenMsg.t -= dt) <= 0) goldenMsg = null;
   if (golden) { if ((golden.t -= dt) <= 0) golden = null; }
   else if ((goldenTimer -= dt) <= 0) { golden = { x: 15 + Math.random() * (VW - 30), y: HUD_H + 12 + Math.random() * (VH - HUD_H - 30), t: 9 }; goldenTimer = 50 + Math.random() * 70; }
-  const target = PIT0 + S.depth * ROW - 100;
-  camY += (target - camY) * Math.min(1, dt * 6);
-  if (Math.abs(target - camY) > 60) camY = target;
+  camY += (targetCamY() - camY) * Math.min(1, dt * 5);
   digAnim = Math.max(0, digAnim - dt * 7);
   shake = Math.max(0, shake - dt * 30);
   if (toastMsg && (toastMsg.t -= dt) <= 0) toastMsg = null;
-  if (!blocked() && Math.random() < dt * 6) debris(frontX(), gyScreen(S.depth) + 2, groundColor(S.depth), 1);
-  for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 240 * dt; p.l -= dt; if (p.l <= 0) fx.splice(i, 1); }
+  if (Math.random() < dt * 8) debris(FRONT, floorY() - 4 - Math.random() * 10, groundColor(S.t), 1);
+  for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.x += p.vx * dt - digSpeed() * dt; p.y += p.vy * dt; p.vy += 240 * dt; p.l -= dt; if (p.l <= 0) fx.splice(i, 1); }
   for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.y -= 16 * dt; p.l -= dt; if (p.l <= 0) pops.splice(i, 1); }
   saveAcc += dt; if (saveAcc > 10) { saveAcc = 0; save(); }
 }
@@ -865,13 +854,13 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) save(
 // ================================================================ boot
 layout();
 if (load()) {
-  const away = Math.min((Date.now() - S.last) / 1000, 12 * 3600), frac = S.m.shift * .1;
-  const gain = power() * pixVal(S.depth) * away * frac;
+  const away = Math.min((Date.now() - S.last) / 1000, 12 * 3600), frac = S.m.shift * .05;
+  const gain = power(true) * worldScale() * away * frac;
   if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your night shift dug up $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
 } else {
-  showModal("PEBBLE MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Equipment lets you dig deeper. Multipliers dig quicker. Sell the treasure you find.", "Seven worlds lie below. Good luck!"]);
+  showModal("PEBBLE MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Each new tool takes you one layer deeper. Get all 8 to open the portal to the next world.", "Multipliers dig quicker. Sell the treasure you dig up."]);
 }
-camY = PIT0 + S.depth * ROW - 100;
+camY = targetCamY();
 requestAnimationFrame(frame);
 </script>
 </body>
