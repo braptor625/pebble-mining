@@ -676,7 +676,7 @@ function paneMore(x, y, w) {
   txt("SOUND: " + (S.sound ? "ON" : "OFF"), x + 17, y + 59 + d, S.sound ? C.ink : C.dim);
   const step = confirmKey === "reset2" ? 2 : confirmKey === "reset1" ? 1 : 0;
   d = button(x + 2, y + 72, w - 4, 15, () => {
-    if (step === 2) { localStorage.removeItem(SAVE_KEY); S = freshRun(); cur = null; camY = drawY = 0; drawX = 4; confirmKey = null; toast("SAVE DELETED", C.red); }
+    if (step === 2) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = freshRun(); cur = null; camY = drawY = 0; drawX = 4; confirmKey = null; toast("SAVE DELETED", C.red); }
     else confirmKey = step ? "reset2" : "reset1";
   }, { on: step > 0, onCol: "#7a2a2a" });
   txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 77 + d, C.red, 1, "center");
