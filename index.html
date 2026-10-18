@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pebble Miner</title>
+<title>Strata Miner</title>
 <style>
   :root { color-scheme: dark; --bg: #14121c; }
   html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
@@ -17,7 +17,7 @@
 "use strict";
 // ================================================================ constants
 const VW = 144, VH = 168, HUD_H = 24, LB = 24, FRONT = 92, TOOLS = 8;
-const SAVE_KEY = "pebbleMinerSave.v4";
+const SAVE_KEY = "strataMinerSave.v1";
 const C = {
   bg: "#14121c", bg2: "#1b1826", hi: "#4f4a66", lo: "#15131c", ink: "#ffffff",
   purple: "#6d1c80", purple2: "#83299a", purpleHi: "#a24bb8", purpleLo: "#3a0c45",
@@ -25,15 +25,16 @@ const C = {
   gold: "#ffe33a", red: "#ff5a4e", green: "#8dff6a", dim: "#d9a6e6", pit: "#b8b8b8",
   hud: "#0e3c78", hudHi: "#79b0ea",
 };
-// economy knobs (tuned with a headless pacing sim: ~31h to finish for an efficient player)
+// economy knobs (tuned with a headless pacing sim: ~30h to finish for an efficient player,
+// with every tool in a world taking about as long as the one before)
 const BAL = {
   toolGrow: 2,       // each tool digs this much faster
-  toolC0: 100,       // price of the second tool
-  toolCg: 7.5,       // each tool costs this much more than the last...
-  toolCgW: 0.25,     // ...plus this much per world
+  toolC0: 1500,      // base tool price (the second tool is a cheap 1/6 of it)
+  toolCg: 2.6,       // each tool costs this much more than the last...
+  toolCgW: 0,        // ...plus this much per world
   worldVal: 1000,    // pixels are worth this much more in each new world
-  worldHard: 11,     // and prices rise this much more than that
-  portalMul: 3,      // the portal costs this many times the last tool
+  worldHard: 18,     // and prices rise this much more than that
+  portalMul: 2,      // the portal costs this many times the last tool
   tEvery: 30,        // seconds between treasures, on average
   tSec: 20,          // a common treasure is worth this many seconds of digging
   clickFrac: 0.15,   // a click digs this fraction of a second of power
@@ -43,7 +44,7 @@ const BAL = {
 // Worlds: palette, 8 unique tools and 5 treasures. Tool: [name, foot tool or [body color, vehicle tool]]
 // Treasure: [name, shape, color, value multiplier]
 const WORLDS = [
-  { name: "Pebble Quarry", sky: ["#8fe3f0", "#d9f6fa"], cloud: "#c8d0d4", ground: ["#c2551e", "#a8461a", "#8a3a18"], speck: ["#1b0f08", "#ffcf3a"],
+  { name: "Red Rock Quarry", sky: ["#8fe3f0", "#d9f6fa"], cloud: "#c8d0d4", ground: ["#c2551e", "#a8461a", "#8a3a18"], speck: ["#1b0f08", "#ffcf3a"],
     tools: [["Shovel", "shovel"], ["Pickaxe", "pick"], ["Jackhammer", "jack"], ["Mine Cart", ["#8a8f99", "scoop"]], ["Saw Tank", ["#38c936", "saw"]], ["Red Dozer", ["#e23b2e", "cone"]], ["Steam Borer", ["#c9a227", "bigcone"]], ["Mega Drill", ["#ff8c2a", "bigcone"]]],
     loot: [["Ruby Heart", "heart", "#e8202a", 1], ["Sapphire", "round", "#3050e0", 2], ["Elixir", "potion", "#7fe0ff", 5], ["Diamond", "diamond", "#9ff4ff", 15], ["Gold Idol", "idol", "#ffd23f", 50]] },
   { name: "Sunscorch Desert", sky: ["#ffc46a", "#fff1cf"], cloud: "#fff6e0", ground: ["#f08a1c", "#d9741a", "#b85e17"], speck: ["#4a2408", "#ffe58a"],
@@ -67,11 +68,11 @@ const WORLDS = [
 ];
 // Multipliers persist between worlds; each world raises their level cap by `per`.
 const MULTS = [
-  { id: "coffee", name: "Strong Coffee", icon: "cup", per: 10, base: 30, grow: 2, desc: l => `DIG SPEED X${fmt2(Math.pow(1.15, l))}` },
-  { id: "moles", name: "Helper Moles", icon: "mole", per: 10, base: 100, grow: 2, desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}` },
-  { id: "sharp", name: "Sharp Edges", icon: "pick", per: 10, base: 20, grow: 2, desc: l => `CLICK POWER X${fmt2(1 + l * .5)}` },
-  { id: "luck", name: "Lucky Charm", icon: "clover", per: 5, base: 200, grow: 2.2, desc: l => `TREASURE X${fmt2(1 + l * .15)} AS OFTEN` },
-  { id: "apprais", name: "Appraiser", icon: "glass", per: 10, base: 300, grow: 2, desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}` },
+  { id: "coffee", name: "Strong Coffee", icon: "cup", per: 10, base: 60, grow: 3, desc: l => `DIG SPEED X${fmt2(Math.pow(1.15, l))}` },
+  { id: "moles", name: "Helper Moles", icon: "mole", per: 10, base: 150, grow: 3, desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}` },
+  { id: "sharp", name: "Sharp Edges", icon: "pick", per: 10, base: 40, grow: 3, desc: l => `CLICK POWER X${fmt2(1 + l * .5)}` },
+  { id: "luck", name: "Lucky Charm", icon: "clover", per: 5, base: 300, grow: 3, desc: l => `TREASURE X${fmt2(1 + l * .15)} AS OFTEN` },
+  { id: "apprais", name: "Appraiser", icon: "glass", per: 10, base: 400, grow: 3, desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}` },
   { id: "shift", name: "Night Shift", icon: "moon", per: 2, base: 1000, grow: 3, desc: l => `EARN ${l * 5}% WHILE AWAY` },
 ];
 
@@ -94,7 +95,7 @@ const W = () => WORLDS[S.w];
 const tool = (w = S.w, t = S.t) => WORLDS[w].tools[t];
 const worldScale = (w = S.w) => Math.pow(BAL.worldVal, w);
 const priceScale = (w = S.w) => Math.pow(BAL.worldVal * BAL.worldHard, w);
-const toolCost = t => BAL.toolC0 * Math.pow(BAL.toolCg + BAL.toolCgW * S.w, t - 1) * priceScale();
+const toolCost = t => BAL.toolC0 * Math.pow(BAL.toolCg + BAL.toolCgW * S.w, t - 1) * priceScale() / (t === 1 ? 6 : 1);
 const portalCost = () => toolCost(TOOLS - 1) * BAL.portalMul;
 const multCap = m => m.per * (S.w + 1);
 const multCost = m => m.base * Math.pow(m.grow, S.m[m.id] - m.per * S.w) * priceScale();
@@ -301,8 +302,8 @@ const cv = document.getElementById("c"), cx = cv.getContext("2d");
 let LW, LH, SC = 1, L = {}, bgCache = null;
 function layout() {
   const portrait = innerHeight > innerWidth * 1.15;
-  if (portrait) { LW = 180; LH = 388; L = { sx: 18, sy: 14, px: 18, py: 206 }; }
-  else { LW = 320; LH = 200; L = { sx: 12, sy: 14, px: 170, py: 14 }; }
+  if (portrait) { LW = 156; LH = 360; L = { sx: 6, sy: 6, px: 6, py: 182 }; }
+  else { LW = 310; LH = 180; L = { sx: 6, sy: 6, px: 160, py: 4 }; }
   cv.width = LW; cv.height = LH;
   const fit = Math.min(innerWidth / LW, innerHeight / LH);
   SC = fit >= 1 ? Math.floor(fit) : fit;
@@ -346,25 +347,11 @@ function drawBackground() {
   }
   cx.drawImage(bgCache, 0, 0);
 }
-function drawWatch() {
-  const x = L.sx - 8, y = L.sy - 7, w = VW + 16, h = VH + 18;
-  // straps
-  cx.fillStyle = "#0e0d12"; cx.fillRect(x + 22, 0, w - 44, y + 4); cx.fillRect(x + 22, y + h - 4, w - 44, 14);
-  cx.fillStyle = "#1c1a22";
-  for (let i = 4; i < y; i += 5) cx.fillRect(x + 24, i, w - 48, 1);
-  // side buttons
-  cx.fillStyle = "#1a1820";
-  cx.fillRect(x - 3, y + 40, 4, 22);
-  for (const by of [30, 80, 130]) cx.fillRect(x + w - 1, y + by, 4, 22);
-  cx.fillStyle = "#5b6070";
-  cx.fillRect(x - 2, y + 41, 2, 20);
-  for (const by of [30, 80, 130]) cx.fillRect(x + w + 1, y + by + 1, 2, 20);
-  // body
-  rrect(x, y, w, h, 9, "#0f0e14");
-  rrect(x + 1, y + 1, w - 2, h - 2, 8, "#454a58");
-  rrect(x + 2, y + 3, w - 4, h - 5, 7, "#363a46");
-  cx.fillStyle = "#000"; cx.fillRect(L.sx - 2, L.sy - 2, VW + 4, VH + 4);
-  txt("PEBBLE", L.sx + VW / 2, L.sy + VH + 4, "#7d8291", 1, "center");
+// simple pixel frame around the play field
+function drawFrame() {
+  cx.fillStyle = C.purpleLo; cx.fillRect(L.sx - 3, L.sy - 3, VW + 6, VH + 6);
+  cx.fillStyle = C.purple; cx.fillRect(L.sx - 2, L.sy - 2, VW + 4, VH + 4);
+  cx.fillStyle = "#000"; cx.fillRect(L.sx - 1, L.sy - 1, VW + 2, VH + 2);
 }
 
 // ================================================================ extra icons + treasure sprites
@@ -730,10 +717,10 @@ function paneMore(x, y, w) {
 function drawToast() {
   if (!toastMsg) return;
   cx.globalAlpha = Math.min(1, toastMsg.t * 2);
-  const wd = tw(toastMsg.text) + 12, x = Math.round(LW / 2 - wd / 2), y = 2;
+  const mid = L.sx + VW / 2, wd = tw(toastMsg.text) + 12, x = Math.round(mid - wd / 2), y = L.sy + VH - 15;
   cx.fillStyle = "#000"; cx.fillRect(x, y, wd, 11);
   cx.fillStyle = C.purple; cx.fillRect(x + 1, y + 1, wd - 2, 9);
-  txt(toastMsg.text, LW / 2, y + 3, toastMsg.col, 1, "center");
+  txt(toastMsg.text, mid, y + 3, toastMsg.col, 1, "center");
   cx.globalAlpha = 1;
 }
 function drawTip() {
@@ -822,7 +809,7 @@ function frame(now) {
   update(dt, now);
   regions = []; tip = null;
   drawBackground();
-  drawWatch();
+  drawFrame();
   const sh = shake > 0 ? Math.round((Math.random() - .5) * shake) : 0;
   cx.save(); cx.beginPath(); cx.rect(L.sx, L.sy, VW, VH); cx.clip(); cx.translate(L.sx + sh, L.sy);
   drawScene(now);
@@ -858,7 +845,7 @@ if (load()) {
   const gain = power(true) * worldScale() * away * frac;
   if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your night shift dug up $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
 } else {
-  showModal("PEBBLE MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Each new tool takes you one layer deeper. Get all 8 to open the portal to the next world.", "Multipliers dig quicker. Sell the treasure you dig up."]);
+  showModal("STRATA MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Each new tool takes you one layer deeper. Get all 8 to open the portal to the next world.", "Multipliers dig quicker. Sell the treasure you dig up."]);
 }
 camY = targetCamY();
 requestAnimationFrame(frame);

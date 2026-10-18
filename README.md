@@ -1,6 +1,6 @@
-# Pebble Miner
+# Strata Miner
 
-A mouse-only incremental mining game inspired by *Pixel Miner* on the original Pebble smartwatch.
+A mouse-only incremental digging game in chunky pixel art.
 
 **Play:** open `index.html` in any browser (no build step, no dependencies). Progress saves automatically in your browser.
 
