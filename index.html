@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pebble Miner</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #14121c; overflow: hidden; }
+  :root { color-scheme: dark; --bg: #14121c; }
+  html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; }
   canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; cursor: none; }
 </style>
@@ -15,283 +16,216 @@
 <script>
 "use strict";
 // ================================================================ constants
-const VW = 144, VH = 168, T = 16, COLS = 9, PLAYER_ROW = 3;
-const SAVE_KEY = "pebbleMinerSave.v1";
+const VW = 144, VH = 168, HUD_H = 24, ROW = 4, PIT0 = 28, LAYERS_PER_WORLD = 100;
+const SAVE_KEY = "pebbleMinerSave.v2";
 const C = {
-  bg: "#14121c", bg2: "#1b1826", panel: "#2a2738", panel2: "#353147", hi: "#4f4a66", lo: "#15131c",
-  ink: "#ece6d6", dim: "#8f8aa3", gold: "#f7c548", red: "#e8615a", green: "#7ed66b", purple: "#a77bf3", pink: "#ff7bff",
+  bg: "#14121c", bg2: "#1b1826", hi: "#4f4a66", lo: "#15131c", ink: "#ffffff",
+  purple: "#6d1c80", purple2: "#83299a", purpleHi: "#a24bb8", purpleLo: "#3a0c45",
+  yellow: "#ffe33a", yellowHi: "#fff59a", yellowLo: "#a8901a", black: "#111111",
+  gold: "#ffe33a", red: "#ff5a4e", green: "#8dff6a", dim: "#d9a6e6", pit: "#b8b8b8",
+  hud: "#0e3c78", hudHi: "#79b0ea",
+};
+// economy knobs (tuned with a headless pacing sim)
+const BAL = {
+  L0: 40,            // dirt pixels in the first layer
+  hard: 1.045,       // each layer is this much bigger/harder
+  rich: 1.012,       // each layer's pixels are worth this much more
+  eqSec: 40,         // equipment power targets ~this many seconds per layer at its start
+  eqGrow: 1.6,       // extra power per equipment tier
+  eqCost: 60,        // equipment costs ~this many layers of income at the previous cap
+  tChance: 0.3,      // chance a layer holds a treasure
+  tLayers: 4,        // a common treasure sells for ~this many layers of income
+  clickFrac: 0.15,   // a click digs this fraction of a second of power
 };
 
-// Each world: palette + ore list. Ore: [name, color, value multiplier, chance, min depth fraction of goal]
+// Worlds are depth zones of 100 layers. Treasure: [name, shape, color, value multiplier]
 const WORLDS = [
-  { name: "Verdant Hills", goal: 100, sky: ["#8fd3ff", "#d8f1ff"], top: "#5fbf4a",
-    layers: ["#8b5a2b", "#74706a", "#55535a"], speck: "#00000033",
-    ores: [["Coal", "#2b2b2b", 1, .12, 0], ["Copper", "#d9814a", 3, .07, .08], ["Iron", "#c9b7a6", 8, .045, .2],
-           ["Silver", "#e6eef2", 20, .025, .35], ["Gold", "#ffd23f", 60, .012, .5], ["Emerald", "#36e07a", 200, .005, .7], ["Diamond", "#8ff4ff", 800, .002, .85]] },
-  { name: "Sunscorch Desert", goal: 150, sky: ["#ffb35c", "#ffe7b0"], top: "#f1d58a",
-    layers: ["#e0bb6e", "#c48a4a", "#9a5f35"], speck: "#5a2e0f33",
-    ores: [["Amber", "#ff9f1c", 1, .12, 0], ["Turquoise", "#3fd0c9", 3, .07, .08], ["Topaz", "#ffcc66", 8, .045, .2],
-           ["Scarab Gem", "#2e9e5b", 20, .025, .35], ["Sunstone", "#ff6b3d", 60, .012, .5], ["Pharaoh Gold", "#ffe14d", 200, .005, .7], ["Desert Rose", "#ff7ab8", 800, .002, .85]] },
-  { name: "Frostveil Peaks", goal: 200, sky: ["#a7c7e7", "#f0f7ff"], top: "#ffffff",
-    layers: ["#bcd9f0", "#7d9cc0", "#4f6a90"], speck: "#ffffff44",
-    ores: [["Frost Quartz", "#e8fbff", 1, .12, 0], ["Glacite", "#7fd6ff", 3, .07, .08], ["Sapphire", "#2f6bff", 8, .045, .2],
-           ["Mithril", "#c0d8e8", 20, .025, .35], ["Aurorite", "#7bffb5", 60, .012, .5], ["Starfrost", "#d6a8ff", 200, .005, .7], ["Frozen Heart", "#ff4d6d", 800, .002, .85]] },
-  { name: "Ember Depths", goal: 250, sky: ["#3b0d0d", "#8a2b12"], top: "#2a1a1a",
-    layers: ["#4a3330", "#3a2626", "#2a1b1d"], speck: "#ff6a0033",
-    ores: [["Sulfur", "#e8e24a", 1, .12, 0], ["Obsidian", "#5c3b8a", 3, .07, .08], ["Ruby", "#ff2e4d", 8, .045, .2],
-           ["Magmite", "#ff7b00", 20, .025, .35], ["Fire Opal", "#ffb08a", 60, .012, .5], ["Dragonglass", "#00e0a0", 200, .005, .7], ["Phoenix Ember", "#fff27a", 800, .002, .85]] },
-  { name: "Lunar Basin", goal: 300, sky: ["#05060f", "#1a1d33"], top: "#cfcfd6",
-    layers: ["#a9a9b3", "#7c7c88", "#55555f"], speck: "#00000040",
-    ores: [["Moon Dust", "#e9e9f2", 1, .12, 0], ["Helium-3", "#9fe7ff", 3, .07, .08], ["Meteorite", "#8a6f5a", 8, .045, .2],
-           ["Starsteel", "#b8c6ff", 20, .025, .35], ["Lunarium", "#f6ffb0", 60, .012, .5], ["Comet Core", "#5cf0ff", 200, .005, .7], ["Moonheart", "#ffffff", 800, .002, .85]] },
-  { name: "Crystal Abyss", goal: 400, sky: ["#1a0b2e", "#3d1b6b"], top: "#7a4fd1",
-    layers: ["#5a3b8f", "#432a70", "#2e1b52"], speck: "#ff9cf733",
-    ores: [["Amethyst", "#b46bff", 1, .12, 0], ["Rose Quartz", "#ffa3d1", 3, .07, .08], ["Prismite", "#9cf6ff", 8, .045, .2],
-           ["Opal", "#ffeef7", 20, .025, .35], ["Voidglass", "#3affd4", 60, .012, .5], ["Chroma Shard", "#ff5ce1", 200, .005, .7], ["Heart Crystal", "#ff2d6f", 800, .002, .85]] },
-  { name: "The Void", goal: 500, sky: ["#000000", "#0b0716"], top: "#1a1426",
-    layers: ["#1c1730", "#140f24", "#0b0815"], speck: "#a78bfa30",
-    ores: [["Echo Stone", "#6f6a8a", 1, .12, 0], ["Nebulite", "#c77dff", 3, .07, .08], ["Dark Matter", "#3a0ca3", 8, .045, .2],
-           ["Starseed", "#ffe66d", 20, .025, .35], ["Quasar", "#4cc9f0", 60, .012, .5], ["Singularity", "#ffffff", 200, .005, .7], ["Cosmic Egg", "#ff9e00", 800, .002, .85]] },
+  { name: "Pebble Quarry", sky: ["#8fe3f0", "#d9f6fa"], cloud: "#c8d0d4", ground: ["#c2551e", "#a8461a", "#8a3a18"], speck: ["#1b0f08", "#ffcf3a"],
+    loot: [["Ruby Heart", "heart", "#e8202a", 1], ["Sapphire", "round", "#3050e0", 3], ["Elixir", "potion", "#7fe0ff", 10], ["Diamond", "diamond", "#9ff4ff", 40], ["Gold Idol", "idol", "#ffd23f", 200]] },
+  { name: "Sunscorch Desert", sky: ["#ffc46a", "#fff1cf"], cloud: "#fff6e0", ground: ["#f08a1c", "#d9741a", "#b85e17"], speck: ["#4a2408", "#ffe58a"],
+    loot: [["Scarab", "round", "#2e9e5b", 1], ["Sand Rose", "heart", "#ff7ab8", 3], ["Sun Coin", "coin", "#ffd23f", 10], ["Topaz", "diamond", "#ffb347", 40], ["Pharaoh Mask", "idol", "#ffe14d", 200]] },
+  { name: "Frostveil Caves", sky: ["#bcd8f0", "#f2f8ff"], cloud: "#ffffff", ground: ["#9fc8e8", "#6f9cc8", "#4a6fa0"], speck: ["#1d3150", "#ffffff"],
+    loot: [["Frost Pearl", "round", "#e8fbff", 1], ["Ice Shard", "diamond", "#7fd6ff", 3], ["Snow Globe", "potion", "#c0e8ff", 10], ["Glacier Heart", "heart", "#4d8bff", 40], ["Yeti Idol", "idol", "#f0f4ff", 200]] },
+  { name: "Ember Depths", sky: ["#2a0a0a", "#6a200c"], cloud: "#5a2a20", ground: ["#5a2a24", "#44201c", "#301614"], speck: ["#120604", "#ff8a2a"],
+    loot: [["Magma Orb", "round", "#ff7b00", 1], ["Ruby", "diamond", "#ff2e4d", 3], ["Fire Elixir", "potion", "#ffb020", 10], ["Obsidian Star", "star", "#7a4aaa", 40], ["Dragon Idol", "idol", "#ff5a2a", 200]] },
+  { name: "Lunar Basin", sky: ["#05060f", "#1a1d33"], cloud: "#2a2d44", ground: ["#a8a8b4", "#80808c", "#5c5c68"], speck: ["#2a2a33", "#eeeeff"],
+    loot: [["Moon Rock", "round", "#d8d8e8", 1], ["Comet Shard", "diamond", "#5cf0ff", 3], ["Alien Vial", "potion", "#8dff6a", 10], ["Star Shard", "star", "#fff27a", 40], ["Rover Idol", "idol", "#c0c8ff", 200]] },
+  { name: "Crystal Abyss", sky: ["#1a0b2e", "#3d1b6b"], cloud: "#4a2a7a", ground: ["#5a3b8f", "#45296f", "#301c52"], speck: ["#140a26", "#ff9cf7"],
+    loot: [["Amethyst", "diamond", "#b46bff", 1], ["Opal", "round", "#ffeef7", 3], ["Prism Vial", "potion", "#9cf6ff", 10], ["Heart Crystal", "heart", "#ff2d6f", 40], ["Crystal Crown", "crown", "#ff5ce1", 200]] },
+  { name: "The Void", sky: ["#000000", "#0b0716"], cloud: "#1a1426", ground: ["#2a2240", "#1c1630", "#100c1e"], speck: ["#05030a", "#a78bfa"],
+    loot: [["Echo Stone", "round", "#6f6a8a", 1], ["Nebula Pearl", "round", "#c77dff", 3], ["Void Vial", "potion", "#3a0ca3", 10], ["Dark Star", "star", "#4cc9f0", 40], ["Cosmic Egg", "idol", "#ff9e00", 200]] },
 ];
-
-// world scaling chained so each new world starts slightly tougher/richer than where the last ended
-const hpCurve = d => (1 + d / 6) * Math.pow(1.012, d);
-const valCurve = d => (1 + d / 7) * Math.pow(1.013, d);
-WORLDS.forEach((w, i) => {
-  w.hm = i ? WORLDS[i - 1].hm * hpCurve(WORLDS[i - 1].goal) * 2.2 : 1;
-  w.vm = i ? WORLDS[i - 1].vm * valCurve(WORLDS[i - 1].goal) * 0.75 : 1;
-});
-
-const UPGRADES = [
-  { id: "pick", name: "Pickaxe", icon: "pick", desc: l => `DMG ${fmt(pickDmg(l))} > ${fmt(pickDmg(l + 1))}`, cost: l => 8 * Math.pow(1.5, l) },
-  { id: "speed", name: "Swift Gloves", icon: "glove", max: 24, desc: l => `${swingRate(l).toFixed(1)} > ${swingRate(l + 1).toFixed(1)} SWINGS/SEC`, cost: l => 40 * Math.pow(1.9, l) },
-  { id: "luck", name: "Lucky Lantern", icon: "lamp", max: 50, desc: l => `ORE CHANCE X${luckMult(l).toFixed(2)} > X${luckMult(l + 1).toFixed(2)}`, cost: l => 60 * Math.pow(1.55, l) },
-  { id: "refine", name: "Refinery", icon: "gem", desc: l => `ORE VALUE X${refineMult(l).toFixed(2)} > X${refineMult(l + 1).toFixed(2)}`, cost: l => 100 * Math.pow(1.45, l) },
-  { id: "drill", name: "Auto-Drill", icon: "drill", max: 20, desc: l => `${drillRate(l).toFixed(1)} > ${drillRate(l + 1).toFixed(1)} AUTO HITS/SEC`, cost: l => 250 * Math.pow(1.8, l) },
-  { id: "robots", name: "Robots", icon: "bot", desc: l => `+$${fmt(robotIncome(l + 1) - robotIncome(l))}/SEC EACH`, cost: l => 150 * Math.pow(1.16, l) },
+const EQUIP = [
+  { name: "Shovel", cap: 5, kind: "foot", tool: "shovel" },
+  { name: "Pickaxe", cap: 12, kind: "foot", tool: "pick" },
+  { name: "Jackhammer", cap: 22, kind: "foot", tool: "jack" },
+  { name: "Mine Cart", cap: 35, body: "#8a8f99", tool: "scoop" },
+  { name: "Saw Tank", cap: 50, body: "#38c936", tool: "saw" },
+  { name: "Red Dozer", cap: 70, body: "#e23b2e", tool: "cone" },
+  { name: "Steam Borer", cap: 100, body: "#c9a227", tool: "bigcone" },
+  { name: "Sand Crawler", cap: 140, body: "#e0b060", tool: "saw" },
+  { name: "Frost Auger", cap: 190, body: "#7fd6ff", tool: "cone" },
+  { name: "Magma Mole", cap: 250, body: "#ff6a1a", tool: "bigcone" },
+  { name: "Laser Crawler", cap: 320, body: "#2bb5c9", tool: "laser" },
+  { name: "Lunar Rover", cap: 400, body: "#d8d8e0", tool: "laser" },
+  { name: "Crystal Cutter", cap: 490, body: "#b46bff", tool: "saw" },
+  { name: "Plasma Bore", cap: 590, body: "#9b5cff", tool: "plasma" },
+  { name: "Void Walker", cap: 700, body: "#4a3a7a", tool: "plasma" },
+  { name: "Star Eater", cap: Infinity, body: "#2a2340", tool: "vortex" },
 ];
-const pickDmg = l => (1 + l * 0.5) * Math.pow(1.17, l);
-const swingRate = l => 3 + l * 0.5;
-const luckMult = l => 1 + l * 0.08;
-const refineMult = l => 1 + l * 0.25;
-const drillRate = l => l * 0.6;
+const layerSize = d => BAL.L0 * Math.pow(BAL.hard, d);
+const pixVal = d => Math.pow(BAL.rich, d);
+const prevCap = k => k ? EQUIP[k - 1].cap : 0;
+const eqPower = k => Math.max(1, layerSize(prevCap(k)) / BAL.eqSec) * Math.pow(BAL.eqGrow, k);
+const eqCost = k => BAL.eqCost * layerSize(prevCap(k)) * pixVal(prevCap(k));
+
+const MULTS = [
+  { id: "coffee", name: "Strong Coffee", icon: "cup", desc: l => `DIG SPEED X${fmt2(Math.pow(1.2, l))}`, cost: l => 40 * Math.pow(1.55, l) },
+  { id: "moles", name: "Helper Moles", icon: "mole", desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .25)}`, cost: l => 150 * Math.pow(1.4, l) },
+  { id: "sharp", name: "Sharp Edges", icon: "pick", desc: l => `CLICK POWER X${l + 1}`, cost: l => 25 * Math.pow(1.5, l) },
+  { id: "luck", name: "Lucky Charm", icon: "clover", max: 20, desc: l => `TREASURE CHANCE X${fmt2(1 + l * .15)}`, cost: l => 300 * Math.pow(1.9, l) },
+  { id: "apprais", name: "Appraiser", icon: "glass", desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}`, cost: l => 500 * Math.pow(1.6, l) },
+  { id: "shift", name: "Night Shift", icon: "moon", max: 10, desc: l => `EARN ${l * 10}% WHILE AWAY`, cost: l => 2000 * Math.pow(2.5, l) },
+  { id: "turbo", name: "Turbo Engine", icon: "bolt", max: 15, needVeh: true, desc: l => `VEHICLE SPEED X${fmt2(Math.pow(1.6, l))}`, cost: l => 5e4 * Math.pow(12, l) },
+];
 
 // ================================================================ state
 let S;
-function freshRun(keep) {
-  return {
-    money: 0, runEarned: 0, totalEarned: keep ? keep.totalEarned : 0, shards: keep ? keep.shards : 0,
-    world: 0, unlocked: keep ? keep.unlocked : 1, dyn: 2,
-    up: { pick: 0, speed: 0, luck: 0, refine: 0, drill: 0, robots: 0 },
-    worlds: WORLDS.map(() => ({ x: 4, y: 0, max: 0, rows: {} })),
-    codex: keep ? keep.codex : {}, sound: keep ? keep.sound : true, won: keep ? keep.won : false,
-    stats: keep ? keep.stats : { blocks: 0, ores: 0, reforges: 0, chests: 0, time: 0 },
-    last: Date.now(),
-  };
+function freshState() {
+  return { px: 0, total: 0, depth: 0, prog: 0, eq: 0, m: { coffee: 0, moles: 0, sharp: 0, luck: 0, apprais: 0, shift: 0, turbo: 0 },
+    inv: {}, found: {}, sold: 0, sound: true, stats: { time: 0, clicks: 0, treasures: 0, golden: 0 }, last: Date.now() };
 }
 function load() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (raw) { S = Object.assign(freshRun(), JSON.parse(raw)); return true; }
+    if (raw) { const d = JSON.parse(raw); S = Object.assign(freshState(), d); S.m = Object.assign(freshState().m, d.m); return true; }
   } catch (e) {}
-  S = freshRun(); return false;
+  S = freshState(); return false;
 }
 function save() { S.last = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
 
-const W = () => WORLDS[S.world];
-const WS = () => S.worlds[S.world];
-function codexBonus() {
-  let n = 0, full = 0;
-  WORLDS.forEach((w, wi) => { let c = 0; w.ores.forEach((o, oi) => { if (S.codex[wi + ":" + oi]) c++; }); n += c; if (c === w.ores.length) full++; });
-  return 1 + n * 0.02 + full * 0.1;
+const worldOf = d => Math.min(WORLDS.length - 1, Math.floor(d / LAYERS_PER_WORLD));
+const W = () => WORLDS[worldOf(S.depth)];
+const cap = () => EQUIP[S.eq].cap;
+const blocked = () => S.depth >= cap();
+let frenzy = 0;
+function power() {
+  let p = eqPower(S.eq) * Math.pow(1.2, S.m.coffee) * (1 + S.m.moles * .25);
+  if (S.eq >= 3) p *= Math.pow(1.6, S.m.turbo);
+  return p * (frenzy > 0 ? 7 : 1);
 }
-const bonusMult = () => 1 + S.shards * 0.1;
-const valueMult = () => refineMult(S.up.refine) * bonusMult() * codexBonus();
-function baseValue(wi, d) { return 2 * WORLDS[wi].vm * valCurve(d); }
-function baseHp(wi, d) { return 5 * WORLDS[wi].hm * hpCurve(d); }
-function robotIncome(n) { return n * 0.05 * baseValue(S.world, Math.max(WS().max, 1)) * valueMult() * (1 + Math.floor(n / 25) * 0.5); }
-function dynCost() { return 30 * baseValue(S.world, Math.max(WS().y, 1)) * valueMult(); }
-const pendingShards = () => Math.floor(Math.sqrt(S.runEarned / 1e5));
+const clickPower = () => Math.max(1, power() * BAL.clickFrac) * (1 + S.m.sharp);
+const treasureMult = () => 1 + S.m.apprais * .3;
 
-// ================================================================ mine generation
+// ================================================================ treasure placement
 function hash(x, y, s) {
   let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
   return (h >>> 0) / 4294967296;
 }
-function tileAt(x, y) {
-  if (y <= 0) return null;
-  const w = W();
-  if (y === w.goal) return { k: "portal" };
-  if (hash(x, y, S.world * 7 + 1) < 0.004) return { k: "chest" };
-  const h = hash(x, y, S.world * 7 + 2), lm = luckMult(S.up.luck);
-  let acc = 0;
-  for (let i = w.ores.length - 1; i >= 0; i--) {
-    const o = w.ores[i];
-    if (y < o[4] * w.goal) continue;
-    acc += o[3] * lm;
-    if (h < acc) return { k: "ore", i };
-  }
-  return { k: "rock" };
+const RARITY = [.5, .27, .14, .07, .02];
+// the treasure (if any) buried in layer d: {i, x (0..1)}
+function treasureAt(d) {
+  if (d < 1 || hash(d, 0, 77) >= Math.min(.9, BAL.tChance * (1 + S.m.luck * .15))) return null;
+  let r = hash(d, 1, 77), i = 0;
+  while (i < 4 && r > RARITY[i]) { r -= RARITY[i]; i++; }
+  return { i, x: .1 + hash(d, 2, 77) * .8 };
 }
-const isMined = (x, y) => ((WS().rows[y] || 0) >> x) & 1;
-const solid = (x, y) => x >= 0 && x < COLS && y > 0 && !isMined(x, y);
-function tileHp(t, y) {
-  const b = baseHp(S.world, y);
-  if (t.k === "portal") return b * 40;
-  if (t.k === "chest") return b * 2;
-  if (t.k === "ore") return b * (1.3 + t.i * 0.3);
-  return b;
-}
-function tileValue(t, y) {
-  const b = baseValue(S.world, y) * valueMult();
-  if (t.k === "ore") return b * W().ores[t.i][2];
-  if (t.k === "chest") return b * 60;
-  if (t.k === "portal") return b * 200;
-  return b * 0.15;
-}
+const treasureValue = (d, i) => BAL.tLayers * layerSize(d) * pixVal(d) * WORLDS[worldOf(d)].loot[i][3] * treasureMult();
 
 // ================================================================ game actions
-let cur = null; // block currently being damaged {x,y,w,dmg,max}
 const fx = [], pops = [];
-let shake = 0, armed = false, swingAnim = 0;
+let shake = 0, digAnim = 0, earnedFrame = 0, ppsShown = 0, golden = null, goldenTimer = 40, goldenMsg = null;
 
-function earn(v) { S.money += v; S.runEarned += v; S.totalEarned += v; }
-
-function hit(x, y, dmg, silent) {
-  if (!solid(x, y)) return false;
-  const t = tileAt(x, y);
-  if (!cur || cur.x !== x || cur.y !== y || cur.w !== S.world) cur = { x, y, w: S.world, dmg: 0, max: tileHp(t, y) };
-  cur.dmg += dmg;
-  if (!silent) { sfx("hit"); debris(x, y, tileColor(t, y), 3); }
-  if (cur.dmg >= cur.max) { breakTile(x, y, t); cur = null; return true; }
-  return false;
-}
-function breakTile(x, y, t) {
-  const ws = WS();
-  ws.rows[y] = (ws.rows[y] || 0) | (1 << x);
-  S.stats.blocks++;
-  const v = tileValue(t, y);
-  earn(v);
-  debris(x, y, tileColor(t, y), 10);
-  if (t.k === "ore") {
-    const o = W().ores[t.i], key = S.world + ":" + t.i;
-    S.stats.ores++;
-    pop(x, y, "+" + fmt(v), o[1]);
-    sfx(t.i >= 4 ? "rare" : "ore");
-    if (!S.codex[key]) { S.codex[key] = 1; toast("NEW ORE: " + o[0], o[1]); }
-  } else if (t.k === "chest") {
-    S.stats.chests++;
-    const d = 1 + (hash(x, y, 99) * 3 | 0);
-    S.dyn += d;
-    pop(x, y, "+" + fmt(v), C.gold);
-    toast(`TREASURE! +$${fmt(v)} & ${d} DYNAMITE`, C.gold);
-    sfx("rare");
-  } else if (t.k === "portal") {
-    pop(x, y, "+" + fmt(v), C.pink);
-    sfx("portal"); shake = 10;
-    if (S.world + 1 < WORLDS.length && S.unlocked <= S.world + 1) {
-      S.unlocked = S.world + 2;
-      showModal("PORTAL OPENED!", [`You broke through the core of ${W().name}.`, `A new world awaits: ${WORLDS[S.world + 1].name}. Its ores are worth far more, but the rock is tougher.`, "Travel from the globe tab whenever you're ready."]);
-    } else if (S.world === WORLDS.length - 1 && !S.won) {
-      S.won = true;
-      showModal("HEART OF THE VOID", ["You dug through all seven worlds. Legendary.", "The mines go on forever. Keep digging, reforge for shards and complete your codex."]);
-    }
-  } else {
-    if (Math.random() < 0.3) pop(x, y, "+" + fmt(v), "#dddddd");
-    sfx("break");
+function earn(v) { S.px += v; S.total += v; earnedFrame += v; }
+// dig `amount` dirt pixels through the current layer(s)
+function dig(amount) {
+  let guard = 0;
+  while (amount > 1e-12 && !blocked() && guard++ < 400) {
+    const size = layerSize(S.depth), take = Math.min(size - S.prog, amount);
+    const t = treasureAt(S.depth), f0 = S.prog / size;
+    S.prog += take; amount -= take;
+    earn(take * pixVal(S.depth));
+    if (t && f0 <= t.x && S.prog / size > t.x) collect(S.depth, t.i);
+    if (S.prog >= size * (1 - 1e-9)) { S.prog = 0; layerDone(); }
   }
+  if (amount > 0) earn(amount * pixVal(S.depth)); // stuck at the cap: still scraping pixels
 }
-// one step of "go toward / dig toward" the pointed tile; returns [nx,ny,isSolid] or null
-function stepToward(tx, ty) {
-  const ws = WS(), px = ws.x, py = ws.y;
-  if (tx === px && ty === py) return null;
-  const dx = Math.sign(tx - px), dy = Math.sign(ty - py), opts = [];
-  if (dy > 0 && Math.abs(ty - py) >= Math.abs(tx - px)) opts.push([0, 1]);
-  if (dx) opts.push([dx, 0]);
-  if (dy > 0) opts.push([0, 1]);
-  if (dy < 0) opts.push([0, -1]);
-  for (const [ox, oy] of opts) {
-    const nx = px + ox, ny = py + oy;
-    if (nx < 0 || nx >= COLS || ny < 0) continue;
-    if (solid(nx, ny)) return [nx, ny, true];
-    if (oy < 0) continue; // can't climb, gravity wins
-    return [nx, ny, false];
-  }
-  return null;
+function layerDone() {
+  S.depth++;
+  if (S.depth % LAYERS_PER_WORLD === 0 && S.depth / LAYERS_PER_WORLD < WORLDS.length) {
+    const w = W();
+    sfx("portal"); shake = 8;
+    showModal("NEW WORLD!", [`You broke through into ${w.name}.`, "New ground, new treasures, and every pixel here is worth more."]);
+  } else if (S.depth % 10 === 0) sfx("layer");
+  if (blocked() && S.eq + 1 < EQUIP.length) toast("TOO HARD! BUY BETTER EQUIPMENT", C.red);
 }
-function act(tx, ty) {
-  const s = stepToward(tx, ty);
-  if (!s) return null;
-  if (s[2]) { hit(s[0], s[1], pickDmg(S.up.pick)); swingAnim = 1; return "hit"; }
-  WS().x = s[0]; WS().y = s[1]; return "move";
+function collect(d, i) {
+  const wi = worldOf(d), key = wi + ":" + i, item = WORLDS[wi].loot[i], v = treasureValue(d, i);
+  const st = S.inv[key] || (S.inv[key] = { n: 0, v: 0 });
+  st.n++; st.v += v; S.stats.treasures++;
+  if (!S.found[key]) { S.found[key] = 1; toast("NEW TREASURE: " + item[0], item[2]); }
+  else toast("FOUND " + item[0], item[2]);
+  pops.push({ x: frontX(), y: gyScreen(S.depth) - 16, gem: [item[1], item[2]], txt: "", c: item[2], l: 1.4 });
+  sfx(i >= 3 ? "rare" : "ore");
 }
-function dynamite(tx, ty) {
-  const ws = WS();
-  if (S.dyn <= 0) return;
-  if (Math.abs(tx - ws.x) > 4 || Math.abs(ty - ws.y) > 4 || ty < 1) { toast("TOO FAR - STAY WITHIN 4 TILES", C.red); return; }
-  S.dyn--; armed = false; shake = 8; sfx("boom");
-  for (let y = ty - 1; y <= ty + 1; y++) for (let x = tx - 1; x <= tx + 1; x++) {
-    if (!solid(x, y)) continue;
-    const t = tileAt(x, y);
-    if (t.k === "portal") hit(x, y, tileHp(t, y) * 0.2, true);
-    else { cur = null; breakTile(x, y, t); }
-  }
-  for (let i = 0; i < 30; i++) fx.push({ x: tx * T + 8, y: ty * T + 8, vx: (Math.random() - .5) * 160, vy: (Math.random() - .7) * 160, c: ["#ffd23f", "#ff7b00", "#ffffff", "#555555"][i % 4], l: .6 + Math.random() * .4 });
+function clickDig() {
+  const p = clickPower();
+  dig(p); S.stats.clicks++; digAnim = 1;
+  sfx(blocked() ? "clank" : "hit");
+  const x = frontX(), y = gyScreen(S.depth) + 2;
+  debris(x, y, groundColor(S.depth), 4);
+  if (Math.random() < .35) pops.push({ x: x + (Math.random() - .5) * 16, y: y - 18, txt: "+" + fmt(p * pixVal(S.depth)), c: "#ffffff", l: .8 });
 }
-function buy(id) {
-  const u = UPGRADES.find(u => u.id === id), l = S.up[id];
-  if (u.max && l >= u.max) return;
-  const c = u.cost(l);
-  if (S.money < c) return;
-  S.money -= c; S.up[id]++; sfx("buy"); cur = null;
-  pulse = { id, t: 0.3 };
+function sell(key) {
+  const st = S.inv[key]; if (!st) return;
+  earn(st.v); S.sold += st.v; delete S.inv[key]; sfx("sell");
 }
-function buyDyn() { const c = dynCost(); if (S.money >= c) { S.money -= c; S.dyn++; sfx("buy"); } }
-function travel(i) {
-  if (i >= S.unlocked || i === S.world) return;
-  S.world = i; cur = null; armed = false; drawX = WS().x; drawY = WS().y; camY = drawY - PLAYER_ROW;
-  toast("WELCOME TO " + W().name, C.ink); sfx("buy");
+function sellAll() {
+  let t = 0; for (const k in S.inv) t += S.inv[k].v;
+  if (!t) return;
+  earn(t); S.sold += t; S.inv = {}; sfx("sell"); toast("SOLD FOR $" + fmt(t), C.yellow);
 }
-function reforge() {
-  const g = pendingShards();
-  if (g < 1) return;
-  if (!confirmKey || confirmKey !== "reforge") { confirmKey = "reforge"; return; }
-  const keep = S; keep.shards += g; keep.stats.reforges++;
-  S = freshRun(keep); cur = null; drawX = 4; drawY = 0; camY = -0.5; confirmKey = null; armed = false;
-  sfx("portal"); toast(`REFORGED! ${fmt(S.shards)} ANCIENT SHARDS`, C.purple); save();
+const invTotal = () => { let t = 0; for (const k in S.inv) t += S.inv[k].v; return t; };
+function buyEquip() {
+  const k = S.eq + 1; if (k >= EQUIP.length) return;
+  const c = eqCost(k); if (S.px < c) return;
+  S.px -= c; S.eq = k; sfx("buy"); shake = 4;
+  toast("NEW EQUIPMENT: " + EQUIP[k].name, C.yellow);
+}
+function buyMult(id) {
+  const m = MULTS.find(m => m.id === id), l = S.m[id];
+  if ((m.max && l >= m.max) || (m.needVeh && S.eq < 3)) return;
+  const c = m.cost(l); if (S.px < c) return;
+  S.px -= c; S.m[id]++; sfx("buy");
+}
+function clickGolden() {
+  S.stats.golden++; sfx("rare"); shake = 4;
+  if (Math.random() < .6) { frenzy = 20; goldenMsg = { t: 2, txt: "FRENZY! X7 FOR 20S" }; }
+  else { const v = Math.max(ppsShown, 1) * 120; earn(v); goldenMsg = { t: 2, txt: "LUCKY! +$" + fmt(v) }; }
+  golden = null;
 }
 
 // ================================================================ effects + sound
-function tileColor(t, y) {
-  if (!t) return "#ffffff";
-  if (t.k === "ore") return W().ores[t.i][1];
-  if (t.k === "chest") return "#b07a3a";
-  if (t.k === "portal") return C.pink;
-  return layerColor(y);
-}
 function debris(x, y, c, n) {
-  for (let i = 0; i < n; i++) fx.push({ x: x * T + 8, y: y * T + 8, vx: (Math.random() - .5) * 90, vy: -Math.random() * 90, c, l: .4 + Math.random() * .4 });
+  for (let i = 0; i < n; i++) fx.push({ x, y, vx: (Math.random() - .5) * 80, vy: -Math.random() * 80, c: Math.random() < .3 ? W().speck[1] : c, l: .3 + Math.random() * .4 });
 }
-function pop(x, y, txt, c) { pops.push({ x: x * T + 8, y: y * T + 4, txt, c, l: 1.1 }); }
-
 let actx = null;
 function sfx(type) {
   if (!S.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const notes = { hit: [[180 + Math.random() * 60, .03]], break: [[320, .04], [200, .05]], ore: [[660, .05], [880, .07]], click: [[900, .02]],
-      rare: [[660, .06], [880, .06], [1320, .1]], portal: [[440, .1], [554, .1], [659, .1], [880, .25]], boom: [[90, .25]], buy: [[520, .04], [780, .06]] }[type];
+    const notes = { hit: [[150 + Math.random() * 80, .025]], clank: [[90, .03]], layer: [[500, .04], [700, .05]], ore: [[660, .05], [880, .07]], click: [[900, .02]],
+      rare: [[660, .06], [880, .06], [1320, .1]], portal: [[440, .1], [554, .1], [659, .1], [880, .25]], buy: [[520, .04], [780, .06]], sell: [[880, .04], [1175, .04], [1568, .08]] }[type];
     let t = actx.currentTime;
     for (const [f, d] of notes) {
       const o = actx.createOscillator(), g = actx.createGain();
-      o.type = type === "boom" ? "sawtooth" : "square"; o.frequency.value = f;
-      g.gain.setValueAtTime(type === "hit" || type === "click" ? .03 : .05, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      o.type = "square"; o.frequency.value = f;
+      g.gain.setValueAtTime(type === "hit" || type === "click" || type === "clank" ? .025 : .045, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
       o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d * .8;
     }
   } catch (e) {}
 }
-
 // ================================================================ pixel font + icons
 const FONT = {
   A: "010/101/111/101/101", B: "110/101/110/101/110", C: "011/100/100/100/011", D: "110/101/101/101/110",
@@ -447,249 +381,368 @@ function drawWatch() {
   txt("PEBBLE", L.sx + VW / 2, L.sy + VH + 4, "#7d8291", 1, "center");
 }
 
-// ================================================================ mine rendering
-let camY = 0, drawX = 4, drawY = 0, hover = null;
+// ================================================================ extra icons + treasure sprites
+Object.assign(IPAL, { n: "#7a4a2a", m: "#8a6a5a" });
+Object.assign(ICONS, {
+  cup:    [".......", "wwwww..", "wnnnwww", "wnnnw.w", "wnnnwww", ".www...", "......."],
+  mole:   ["..mmm..", ".mmmmm.", "mkmmkmm", "mmmsmmm", "mmsssmm", ".mmmmm.", "s.....s"],
+  clover: [".ee.ee.", "eeeeeee", ".eeeee.", "eeeeeee", ".ee.ee.", "...n...", "...n..."],
+  glass:  [".kkk...", "kwcck..", "kcccck.", "kcccck.", ".kkkn..", "....nn.", ".....nn"],
+  moon:   ["..yyy..", ".yy....", "yy.....", "yy.....", "yy.....", ".yy....", "..yyy.."],
+  bolt:   ["...yy..", "..yy...", ".yyyyy.", "...yy..", "..yy...", ".yy....", "y......"],
+  tools:  ["gg...k.", "gnn.kkk", "..n..k.", "..nn.n.", "...nnn.", "...n.n.", "..n...n"],
+});
+const SHAPES = {
+  heart:   [".aa.aa.", "awaaaaa", "aaaaaaa", "aaaaaab", ".aaaab.", "..aab..", "...b..."],
+  round:   ["..aaa..", ".awaaa.", "awaaaab", "aaaaaab", "aaaaabb", ".abbbb.", "..bbb.."],
+  diamond: ["..aaa..", ".awaaa.", "aaaaaaa", ".aaaab.", "..aab..", "...b...", "......."],
+  potion:  ["..ggg..", "...w...", "..aaa..", ".awaaa.", "aaaaaab", "aaaaabb", ".abbbb."],
+  coin:    ["..aaa..", ".abbba.", "abaaaba", "abawaba", "abaaaba", ".abbba.", "..aaa.."],
+  star:    ["...a...", "..awa..", "aaaaaaa", ".aaaab.", ".aa.ab.", "aa...bb", "......."],
+  idol:    [".aaaaa.", "awbabwa", "aaaaaaa", ".aabaa.", "..aaa..", ".aaaaa.", "abbbbba"],
+  crown:   ["a..a..a", "aa.a.aa", "awaaaaa", "aaaaaaa", "abababa", ".bbbbb.", "......."],
+};
+const scache = new Map();
+function gem(shape, col, x, y) {
+  const key = shape + col;
+  let c = scache.get(key);
+  if (!c) {
+    c = document.createElement("canvas"); c.width = 7; c.height = 7;
+    const g = c.getContext("2d"), pal = { a: col, b: mix(col, "#000000", .45), w: "#ffffff", g: "#9a7a5a" };
+    SHAPES[shape].forEach((r, yy) => { for (let xx = 0; xx < 7; xx++) if (r[xx] !== ".") { g.fillStyle = pal[r[xx]]; g.fillRect(xx, yy, 1, 1); } });
+    scache.set(key, c);
+  }
+  cx.drawImage(c, Math.round(x), Math.round(y));
+}
+
+// ================================================================ scene rendering
+let camY = PIT0 - 100;
 function mix(a, b, t) {
   const pa = parseInt(a.slice(1, 7), 16), pb = parseInt(b.slice(1, 7), 16);
   const r = (pa >> 16) * (1 - t) + (pb >> 16) * t, g = ((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t, bl = (pa & 255) * (1 - t) + (pb & 255) * t;
   return "#" + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
 }
-function layerColor(y) {
-  const Ls = W().layers, f = Math.min(y / W().goal, 1.5) * (Ls.length - 1);
-  const i = Math.min(Math.floor(f), Ls.length - 2);
-  return mix(Ls[i], Ls[i + 1], Math.min(f - i, 1));
+function groundColor(d) {
+  const w = WORLDS[worldOf(d)], f = Math.min(1, (d % LAYERS_PER_WORLD) / LAYERS_PER_WORLD) * 2;
+  const i = Math.min(1, Math.floor(f));
+  return mix(w.ground[i], w.ground[i + 1], Math.min(1, f - i));
 }
-function drawTile(x, y, sx, sy, now) {
-  const t = tileAt(x, y), w = W();
-  cx.fillStyle = layerColor(y); cx.fillRect(sx, sy, T, T);
-  cx.fillStyle = w.speck;
-  for (let i = 0; i < 5; i++) cx.fillRect(sx + (hash(x, y, 31 + i) * 14 | 0), sy + (hash(y, x, 57 + i) * 14 | 0), 2, 1);
-  cx.fillStyle = "#ffffff14"; cx.fillRect(sx, sy, T, 1);
-  cx.fillStyle = "#0000002a"; cx.fillRect(sx, sy + T - 1, T, 1);
-  if (y === 1) { cx.fillStyle = w.top; cx.fillRect(sx, sy, T, 3); cx.fillRect(sx + (hash(x, 0, 3) * 12 | 0), sy + 3, 2, 2); }
-  if (t.k === "ore") {
-    const c = w.ores[t.i][1];
-    for (let i = 0; i < 4 + t.i; i++) {
-      const ox = 2 + (hash(x, y, 70 + i) * 10 | 0), oy = 2 + (hash(x, y, 90 + i) * 10 | 0);
-      cx.fillStyle = c; cx.fillRect(sx + ox, sy + oy, 3, 3);
-      cx.fillStyle = "#ffffff88"; cx.fillRect(sx + ox, sy + oy, 1, 1);
-    }
-    if (t.i >= 4 && (now / 300 + x + y) % 6 < 1) { cx.fillStyle = "#fff"; cx.fillRect(sx + 7, sy + 3, 1, 3); cx.fillRect(sx + 6, sy + 4, 3, 1); }
-  } else if (t.k === "chest") {
-    cx.fillStyle = "#6b4321"; cx.fillRect(sx + 2, sy + 5, 12, 9);
-    cx.fillStyle = "#b07a3a"; cx.fillRect(sx + 3, sy + 6, 10, 3); cx.fillRect(sx + 3, sy + 10, 10, 3);
-    cx.fillStyle = "#ffd23f"; cx.fillRect(sx + 7, sy + 8, 2, 3);
-  } else if (t.k === "portal") {
-    const p = (now / 200) % 16;
-    cx.fillStyle = "#2a0838"; cx.fillRect(sx, sy, T, T);
-    for (let i = 0; i < 4; i++) { cx.fillStyle = [C.pink, "#9b5cff", "#5cf0ff", "#ffffff"][i]; cx.fillRect(sx + ((p + i * 4 + x * 3) % 16), sy + ((i * 5 + y) % 14) + 1, 2, 2); }
-    cx.strokeStyle = C.pink; cx.strokeRect(sx + .5, sy + .5, T - 1, T - 1);
-  }
-  if (cur && cur.x === x && cur.y === y && cur.w === S.world) {
-    const f = cur.dmg / cur.max;
-    cx.fillStyle = "#000000aa";
-    cx.fillRect(sx + 7, sy + 3, 1, 5); cx.fillRect(sx + 8, sy + 7, 3, 1);
-    if (f > .33) { cx.fillRect(sx + 3, sy + 9, 5, 1); cx.fillRect(sx + 10, sy + 8, 1, 5); }
-    if (f > .66) { cx.fillRect(sx + 2, sy + 3, 1, 4); cx.fillRect(sx + 11, sy + 2, 3, 1); cx.fillRect(sx + 5, sy + 12, 4, 1); }
+const gyScreen = d => PIT0 + d * ROW - camY;
+const digDir = () => S.depth % 2 === 0 ? 1 : -1;
+function frontX() { const f = S.prog / layerSize(S.depth); return digDir() > 0 ? f * VW : VW - f * VW; }
+
+function drawClouds(now) {
+  const w = W(), base = -camY;
+  if (base < HUD_H) return;
+  cx.fillStyle = w.cloud;
+  for (let i = 0; i < 3; i++) {
+    const x = ((now / (90 + i * 40) + i * 70) % (VW + 40)) - 30, y = base - 36 - i * 13 + (i === 1 ? 6 : 0);
+    cx.fillRect(Math.round(x), y, 18, 4); cx.fillRect(Math.round(x) + 4, y - 3, 9, 3);
   }
 }
-function drawMiner(sx, sy, now) {
-  const blink = (now % 3000) < 120;
-  cx.fillStyle = "#3a6ee8"; cx.fillRect(sx + 4, sy + 8, 8, 6);
-  cx.fillStyle = "#24408a"; cx.fillRect(sx + 4, sy + 14, 3, 2); cx.fillRect(sx + 9, sy + 14, 3, 2);
-  cx.fillStyle = "#f2c8a0"; cx.fillRect(sx + 5, sy + 4, 6, 4);
-  cx.fillStyle = blink ? "#f2c8a0" : "#222"; cx.fillRect(sx + 6, sy + 5, 1, 1); cx.fillRect(sx + 9, sy + 5, 1, 1);
-  cx.fillStyle = "#f2c14e"; cx.fillRect(sx + 4, sy + 1, 8, 3);
-  cx.fillStyle = "#fff8b0"; cx.fillRect(sx + 7, sy + 1, 2, 2);
-  const a = swingAnim > 0 ? -0.9 + (1 - swingAnim) * 1.8 : 0.5;
-  cx.save(); cx.translate(sx + 12, sy + 10); cx.rotate(a);
-  cx.fillStyle = "#8b5a2b"; cx.fillRect(0, -1, 7, 2);
-  cx.fillStyle = "#cfd6de"; cx.fillRect(5, -4, 2, 8);
-  cx.restore();
-}
-function drawMine(now) {
-  const w = W(), ws = WS();
-  const sh = shake > 0 ? Math.round((Math.random() - .5) * shake) : 0;
-  cx.save();
-  cx.beginPath(); cx.rect(L.sx, L.sy, VW, VH); cx.clip();
-  cx.translate(L.sx + sh, L.sy);
+function drawScene(now) {
+  const w = W();
   const g = cx.createLinearGradient(0, 0, 0, VH);
   g.addColorStop(0, w.sky[0]); g.addColorStop(1, w.sky[1]);
-  cx.fillStyle = g; cx.fillRect(-10, 0, VW + 20, VH);
-  const oy = Math.round(camY * T);
-  if (camY < 2) {
-    cx.fillStyle = "#ffffff55";
-    cx.fillRect(Math.round((now / 80) % 180) - 30, 14 - oy, 18, 4); cx.fillRect(Math.round((now / 120 + 90) % 180) - 30, 24 - oy, 12, 3);
+  cx.fillStyle = g; cx.fillRect(0, 0, VW, VH);
+  drawClouds(now);
+  // open pit: surface band then every dug layer, tinted by what it used to be
+  const top = -camY;
+  cx.fillStyle = mix(groundColor(0), C.pit, .85); cx.fillRect(0, top, VW, PIT0);
+  cx.fillStyle = mix(groundColor(0), "#000000", .3); cx.fillRect(0, top, VW, 1);
+  const first = Math.max(0, Math.floor((camY - PIT0) / ROW)), last = Math.ceil((camY + VH - PIT0) / ROW);
+  for (let r = first; r <= last; r++) {
+    const y = gyScreen(r);
+    if (r < S.depth) {
+      cx.fillStyle = mix(groundColor(r), C.pit, r % 10 === 9 ? .62 : .78); cx.fillRect(0, y, VW, ROW);
+    } else {
+      cx.fillStyle = groundColor(r); cx.fillRect(0, y, VW, ROW);
+    }
   }
-  const top = Math.floor(camY);
-  for (let y = top; y <= top + 11; y++) for (let x = 0; x < COLS; x++) {
-    const sx = x * T, sy = y * T - oy;
-    if (solid(x, y)) drawTile(x, y, sx, sy, now);
-    else if (y > 0) { cx.fillStyle = mix(layerColor(y), "#000000", .65); cx.fillRect(sx, sy, T, T); }
+  // the current layer: dug part opens up
+  const fx0 = frontX(), cy = gyScreen(S.depth);
+  cx.fillStyle = mix(groundColor(S.depth), C.pit, .78);
+  if (digDir() > 0) cx.fillRect(0, cy, Math.round(fx0), ROW); else cx.fillRect(Math.round(fx0), cy, VW - Math.round(fx0), ROW);
+  // specks in undug ground
+  for (let r = Math.max(S.depth, first); r <= last; r++) {
+    const y = gyScreen(r), ws = WORLDS[worldOf(r)];
+    for (let c = 0; c < VW / 4; c++) {
+      const x = c * 4;
+      if (r === S.depth && (digDir() > 0 ? x < fx0 : x + 4 > fx0)) continue;
+      const h = hash(c, r, 3);
+      if (h < .16) { cx.fillStyle = ws.speck[0]; cx.fillRect(x, y + 1, 3, 1); if (h < .07) { cx.fillStyle = ws.speck[1]; cx.fillRect(x + (h < .035 ? 0 : 2), y, 1, 1); } }
+    }
   }
-  if (hover && !armed && !modal) {
-    const nt = stepToward(hover[0], hover[1]);
-    if (nt) corners(nt[0] * T, nt[1] * T - oy, nt[2] ? "#ffffff" : "#ffffff66", now);
+  // buried treasure
+  for (let r = Math.max(S.depth, first); r <= last + 2; r++) {
+    const t = treasureAt(r);
+    if (!t) continue;
+    const x = (r % 2 === 0 ? t.x : 1 - t.x) * VW;
+    if (r === S.depth && S.prog / layerSize(r) > t.x) continue;
+    const it = WORLDS[worldOf(r)].loot[t.i];
+    gem(it[1], it[2], x - 3, gyScreen(r) - 1);
+    if (t.i >= 2 && (now / 200 + r) % 8 < 1) { cx.fillStyle = "#ffffff"; cx.fillRect(Math.round(x), gyScreen(r) - 3, 1, 3); cx.fillRect(Math.round(x) - 1, gyScreen(r) - 2, 3, 1); }
   }
-  if (hover && armed) {
-    cx.strokeStyle = (now / 150 | 0) % 2 ? "#ff5a3c" : "#ffd23f";
-    cx.strokeRect((hover[0] - 1) * T + .5, (hover[1] - 1) * T - oy + .5, T * 3 - 1, T * 3 - 1);
-  }
-  drawMiner(Math.round(drawX * T), Math.round(drawY * T) - oy, now);
-  const dark = Math.min(0.75, ws.y / w.goal * 0.6 + (S.world >= 3 ? 0.15 : 0));
-  if (dark > 0.02) {
-    const px = drawX * T + 8, py = drawY * T - oy + 8, r = 46 + S.up.luck * 1.2;
-    const rg = cx.createRadialGradient(px, py, 8, px, py, r);
-    rg.addColorStop(0, "rgba(0,0,0,0)"); rg.addColorStop(1, `rgba(0,0,0,${dark})`);
-    cx.fillStyle = rg; cx.fillRect(-10, 0, VW + 20, VH);
-  }
-  for (const p of fx) { cx.fillStyle = p.c; cx.fillRect(p.x | 0, (p.y - oy) | 0, 2, 2); }
+  drawDigger(now);
+  for (const p of fx) { cx.fillStyle = p.c; cx.fillRect(p.x | 0, p.y | 0, 2, 2); }
   for (const p of pops) {
     cx.globalAlpha = Math.min(1, p.l * 2);
-    txtS(p.txt, p.x, p.y - oy, p.c, 1, "center");
+    if (p.gem) gem(p.gem[0], p.gem[1], p.x - 3, p.y);
+    else txtS(p.txt, p.x, p.y, p.c, 1, "center");
   }
   cx.globalAlpha = 1;
-  // depth tag (Pebble-style status bar)
-  const tag = ws.y + "M";
-  cx.fillStyle = "#000000aa"; cx.fillRect(0, 0, tw(tag) + 6, 9);
-  txt(tag, 3, 2, "#ffffff");
-  if (armed) { cx.fillStyle = "#000000aa"; cx.fillRect(0, VH - 9, VW, 9); txt("CLICK TO BLAST (3X3)", VW / 2, VH - 7, "#ff8c2a", 1, "center"); }
+  if (golden) {
+    const s = (now / 120 | 0) % 2;
+    cx.fillStyle = "#000"; cx.fillRect(golden.x - 4, golden.y - 4, 9, 9);
+    cx.fillStyle = s ? "#ffe33a" : "#fff59a"; cx.fillRect(golden.x - 3, golden.y - 3, 7, 7);
+    cx.fillStyle = "#ffffff"; cx.fillRect(golden.x - 2, golden.y - 2, 2, 2);
+    if (s) { cx.fillStyle = "#ffffff"; cx.fillRect(golden.x - 6, golden.y, 2, 1); cx.fillRect(golden.x + 5, golden.y, 2, 1); cx.fillRect(golden.x, golden.y - 6, 1, 2); cx.fillRect(golden.x, golden.y + 5, 1, 2); }
+  }
+  if (blocked() && S.eq + 1 < EQUIP.length && (now / 400 | 0) % 2) {
+    const y = VH - 22;
+    cx.fillStyle = "#000000"; cx.fillRect(10, y, VW - 20, 16);
+    cx.fillStyle = C.red; cx.fillRect(11, y + 1, VW - 22, 14);
+    txt("TOO HARD TO DIG!", VW / 2, y + 2, "#ffffff", 1, "center");
+    txt("BUY BETTER EQUIPMENT", VW / 2, y + 9, "#ffffff", 1, "center");
+  }
+  if (frenzy > 0) { txtS("FRENZY X7 " + Math.ceil(frenzy) + "S", VW / 2, HUD_H + 3, C.yellow, 1, "center"); }
+  else if (goldenMsg) txtS(goldenMsg.txt, VW / 2, HUD_H + 3, C.yellow, 1, "center");
+  drawHud();
+}
+function hudBox(x, y, w, label, val, fill, border, ink) {
+  cx.fillStyle = border; cx.fillRect(x + 1, y, w - 2, 10); cx.fillRect(x, y + 1, w, 8);
+  cx.fillStyle = fill; cx.fillRect(x + 1, y + 1, w - 2, 8);
+  txt(label, x + 3, y + 3, ink);
+  txt(val, x + w - 3, y + 3, ink, 1, "right");
+}
+function drawHud() {
+  hudBox(1, 1, 71, "PPS", fmt(ppsShown), C.hud, C.hudHi, "#ffffff");
+  hudBox(73, 1, 70, "DEPTH", String(S.depth), C.hud, C.hudHi, "#ffffff");
+  hudBox(1, 12, 142, "PIXELS", fmtC(S.px), C.hud, C.hudHi, "#ffffff");
+}
+
+// ---------------------------------------------------------------- miner + vehicles
+function drawDigger(now) {
+  const e = EQUIP[S.eq], dir = digDir(), feet = gyScreen(S.depth) + ROW;
+  const w = e.kind === "foot" ? 12 : 31;
+  let x = dir > 0 ? frontX() - w + 2 : frontX() - 2;
+  x = Math.max(-2, Math.min(VW - w + 2, x));
+  cx.save();
+  if (dir > 0) cx.translate(Math.round(x), feet);
+  else { cx.translate(Math.round(x + w), feet); cx.scale(-1, 1); }
+  if (e.kind === "foot") drawMiner(e.tool, now); else drawVehicle(e, now);
   cx.restore();
 }
-function corners(x, y, col, now) {
-  const o = (now / 250 | 0) % 2;
+function px(x, y, w, h, c) { cx.fillStyle = c; cx.fillRect(x, y, w, h); }
+// origin = feet, facing right
+function drawMiner(tool, now) {
+  const step = blocked() ? 0 : ((now / 160 | 0) % 2), sw = digAnim;
+  px(2, -3, 3, 3, "#3a2a1a"); px(6, -3 + step, 3, 3 - step, "#3a2a1a");            // boots
+  px(2, -8, 7, 5, "#2f5fd0"); px(3, -8, 1, 2, "#5f8fff");                          // overalls
+  px(3, -11, 5, 3, "#f2c8a0"); px(6, -10, 1, 1, "#111");                            // face
+  px(1, -14, 8, 3, "#e8202a"); px(8, -12, 2, 1, "#e8202a"); px(4, -13, 2, 1, "#ffffff"); // red cap
+  const a = sw > 0 ? -0.6 + (1 - sw) * 1.6 : 0.5;
+  if (tool === "jack") {
+    const j = sw > 0 ? (now / 30 | 0) % 2 : 0;
+    px(8, -9, 3, 2, "#2f5fd0");
+    px(10, -12 + j, 3, 9, "#7f8796"); px(9, -12 + j, 5, 2, "#4a4f5c"); px(11, -3 + j, 1, 3, "#cfd6de");
+    return;
+  }
+  cx.save(); cx.translate(8, -7); cx.rotate(a);
+  px(0, -1, 8, 2, "#8b5a2b");
+  if (tool === "shovel") { px(7, -2, 3, 5, "#b8bec8"); px(9, -2, 1, 5, "#7f8796"); }
+  else { px(7, -4, 2, 8, "#cfd6de"); px(6, -4, 1, 2, "#cfd6de"); px(6, 2, 1, 2, "#cfd6de"); }
+  cx.restore();
+  px(7, -8, 3, 2, "#2f5fd0");
+}
+function circle(cxp, cyp, r, col) {
   cx.fillStyle = col;
-  for (const [cx0, cy0, dx, dy] of [[x - o, y - o, 1, 1], [x + T - 1 + o, y - o, -1, 1], [x - o, y + T - 1 + o, 1, -1], [x + T - 1 + o, y + T - 1 + o, -1, -1]]) {
-    cx.fillRect(Math.min(cx0, cx0 + dx * 3), cy0, 4, 1); cx.fillRect(cx0, Math.min(cy0, cy0 + dy * 3), 1, 4);
+  for (let y = -r; y <= r; y++) { const w = Math.round(Math.sqrt(r * r - y * y + r * .8)); cx.fillRect(cxp - w, cyp + y, w * 2 + 1, 1); }
+}
+function drawVehicle(e, now) {
+  const run = !blocked(), t = now / 1000, body = e.body, dark = mix(body, "#000000", .4), light = mix(body, "#ffffff", .45);
+  const bob = run ? ((now / 120 | 0) % 2) : 0;
+  // tracks
+  px(1, -7, 21, 7, "#111111"); px(0, -6, 23, 5, "#111111");
+  for (let i = 0; i < 5; i++) { px(2 + i * 4, -5, 3, 3, "#8a8f99"); px(3 + i * 4, -4, 1, 1, "#d0d4dc"); }
+  const tr = run ? Math.floor(t * 12) % 4 : 0;
+  for (let i = 0; i < 6; i++) { px(1 + ((i * 4 + tr) % 22), -7, 2, 1, "#555555"); px(1 + ((i * 4 + 22 - tr) % 22), -1, 2, 1, "#555555"); }
+  // body
+  px(1, -15 - bob, 20, 8, "#111111");
+  px(2, -14 - bob, 18, 6, body); px(2, -14 - bob, 18, 1, light); px(2, -9 - bob, 18, 1, dark);
+  px(4, -12 - bob, 4, 2, light); px(13, -12 - bob, 5, 1, dark);
+  // exhaust
+  px(3, -20 - bob, 3, 5, "#111111"); px(4, -19 - bob, 1, 4, "#9aa0aa");
+  // cab
+  px(9, -23 - bob, 12, 9, "#111111");
+  px(10, -22 - bob, 10, 7, "#8fe8ff"); px(10, -22 - bob, 10, 1, "#ffffff");
+  px(13, -21 - bob, 5, 2, "#e8202a"); px(14, -21 - bob, 2, 1, "#ffffff");
+  px(13, -19 - bob, 5, 2, "#f2c8a0"); px(16, -19 - bob, 1, 1, "#111");
+  // tool, centered at ledge height
+  const ty = -5, spin = run ? t * 14 : 0;
+  px(20, -10, 3, 4, "#111111");
+  if (e.tool === "scoop") {
+    const s = run ? Math.sin(t * 12) : 0;
+    px(22, -9 + Math.round(s), 7, 6, "#111111"); px(23, -8 + Math.round(s), 5, 4, "#9aa0aa"); px(28, -4 + Math.round(s), 2, 2, "#cfd6de");
+  } else if (e.tool === "saw" || e.tool === "vortex") {
+    const cxp = 26, r = 6;
+    circle(cxp, ty, r, "#111111"); circle(cxp, ty, r - 1, e.tool === "vortex" ? "#2a1a4a" : "#b8bec8");
+    for (let i = 0; i < 6; i++) {
+      const a = spin + i * Math.PI / 3, ca = Math.cos(a), sa = Math.sin(a);
+      px(Math.round(cxp + ca * r), Math.round(ty + sa * r), 1, 1, e.tool === "vortex" ? "#ffe33a" : "#ffffff");
+      px(Math.round(cxp + ca * 3), Math.round(ty + sa * 3), 1, 1, e.tool === "vortex" ? "#ff9e00" : "#111111");
+    }
+    px(cxp - 1, ty - 1, 2, 2, e.tool === "vortex" ? "#ffffff" : "#111111");
+  } else if (e.tool === "cone" || e.tool === "bigcone") {
+    const big = e.tool === "bigcone", h = big ? 6 : 4, len = big ? 10 : 8, base = 22;
+    const c1 = big ? "#e0c060" : "#e8e8e8", c2 = big ? "#8a6a20" : "#8a8f99";
+    for (let i = 0; i <= len; i++) {
+      const hh = Math.max(0, Math.round(h * (1 - i / len)));
+      const stripe = (Math.floor(i / 2 + spin) % 2 === 0) ? c1 : c2;
+      px(base + i, ty - hh - 1, 1, hh * 2 + 2, "#111111");
+      if (hh > 0) px(base + i, ty - hh, 1, hh * 2, stripe);
+    }
+  } else if (e.tool === "laser") {
+    px(22, -9, 5, 7, "#111111"); px(23, -8, 3, 5, "#4a4f5c"); px(26, -6, 1, 1, "#ff4040");
+    if (run && (now / 60 | 0) % 3) { px(27, -6, 6, 2, "#ff4040"); px(27, -6, 6, 1, "#ffc0c0"); }
+  } else if (e.tool === "plasma") {
+    const r = 4 + (run ? Math.round(Math.sin(t * 10)) : 0);
+    circle(26, ty, r + 1, "#2a0a4a"); circle(26, ty, r, "#b46bff"); circle(26, ty, Math.max(1, r - 2), "#f0d0ff");
   }
 }
 
 // ================================================================ panel UI (immediate mode)
-let regions = [], mouse = null, tab = "shop", confirmKey = null, pulse = null, tip = null, modal = null, toastMsg = null;
-const TABS = [["shop", "pick", "SHOP"], ["worlds", "globe", "WORLDS"], ["codex", "book", "CODEX"], ["reforge", "shard", "REFORGE"], ["more", "gear", "MORE"]];
+let regions = [], mouse = null, mouseDown = false, tab = "equip", confirmKey = null, tip = null, modal = null, toastMsg = null;
+const TABS = [["equip", "tools", "EQUIPMENT: MINE DEEPER"], ["mult", "bolt", "MULTIPLIERS: MINE QUICKER"], ["treasure", "gem", "TREASURE: SELL HERE"], ["more", "gear", "COLLECTION & SETTINGS"]];
 const inR = (x, y, w, h) => mouse && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
 function region(x, y, w, h, fn, tipText) { regions.push({ x, y, w, h, fn }); if (tipText && inR(x, y, w, h)) tip = tipText; }
-function button(x, y, w, h, fn, opt = {}) {
+// purple menu row; hovered rows turn yellow like the original's selection
+function item(x, y, w, h, fn, opt = {}) {
   const hov = inR(x, y, w, h) && !opt.disabled, down = hov && mouseDown;
-  const fill = opt.on ? (opt.onCol || "#5a3f2a") : opt.disabled ? "#24212f" : hov ? "#433e58" : C.panel2;
-  if (down) { cx.fillStyle = C.lo; cx.fillRect(x, y, w, h); cx.fillStyle = fill; cx.fillRect(x + 1, y + 2, w - 2, h - 3); }
-  else bevel(x, y, w, h, fill, opt.on ? "#a8743f" : hov ? "#6a6488" : C.hi);
-  if (hov && !opt.on) { cx.fillStyle = C.gold; cx.fillRect(x, y + h - 1, w, 1); }
-  if (!opt.disabled || opt.clickDisabled) region(x, y, w, h, fn, opt.tip);
-  else if (opt.tip && inR(x, y, w, h)) tip = opt.tip;
-  return down ? 1 : 0;
+  const sel = hov || opt.on;
+  cx.fillStyle = C.purpleLo; cx.fillRect(x, y, w, h);
+  cx.fillStyle = sel ? C.yellow : opt.disabled ? "#4e1660" : C.purple2; cx.fillRect(x + 1, y + 1 + (down ? 1 : 0), w - 2, h - 2 - (down ? 1 : 0));
+  cx.fillStyle = sel ? C.yellowHi : opt.disabled ? "#5e2070" : C.purpleHi; cx.fillRect(x + 1, y + 1 + (down ? 1 : 0), w - 2, 1);
+  if (!opt.disabled) region(x, y, w, h, fn, opt.tip); else if (opt.tip && inR(x, y, w, h)) tip = opt.tip;
+  return { ink: sel ? C.black : opt.disabled ? "#c08ad0" : "#ffffff", d: down ? 1 : 0, sel };
 }
+function panelBg(x, y, w, h) { cx.fillStyle = C.purpleLo; cx.fillRect(x, y, w, h); cx.fillStyle = C.purple; cx.fillRect(x + 1, y + 1, w - 2, h - 2); }
 function drawPanel(now) {
-  const X = L.px, Y = L.py, PW = 144, ws = WS(), w = W();
-  // header
-  bevel(X, Y, PW, 34, C.panel);
-  icon("coin", X + 4, Y + 4, 2);
-  txtS("$" + fmt(S.money), X + 21, Y + 5, C.gold, 2);
-  const inc = robotIncome(S.up.robots);
-  if (inc > 0) txt("+" + fmt(inc) + "/S", X + PW - 4, Y + 5, C.green, 1, "right");
-  txt(w.name, X + 5, Y + 19, C.ink);
-  txt(ws.y + "M", X + PW - 4, Y + 19, C.dim, 1, "right");
-  bar(X + 4, Y + 27, PW - 8, 4, ws.max / w.goal, ws.max >= w.goal ? C.pink : C.purple, "#ffffff66");
-  region(X + 4, Y + 25, PW - 8, 8, null, ws.max >= w.goal ? "PORTAL REACHED! DEEPER = RICHER" : `PORTAL AT ${w.goal}M - BEST ${ws.max}M`);
+  const X = L.px, Y = L.py, PW = 144;
+  panelBg(X, Y, PW, 172);
+  // header mirrors the in-game HUD, in the menu's yellow
+  hudBox(X + 2, Y + 2, 70, "PPS", fmt(ppsShown), C.yellow, C.black, C.black);
+  hudBox(X + 73, Y + 2, 69, "DEPTH", String(S.depth), C.yellow, C.black, C.black);
+  hudBox(X + 2, Y + 13, 140, "PIXELS", fmtC(S.px), C.yellow, C.black, C.black);
   // tabs
-  const tY = Y + 37, tWd = 28;
+  const tY = Y + 25;
   TABS.forEach(([id, ic, label], i) => {
-    const x = X + i * (tWd + 1), on = tab === id;
-    button(x, tY, tWd, 14, () => { tab = id; confirmKey = null; sfx("click"); }, { on, onCol: C.panel, tip: label });
-    icon(ic, x + 10, tY + 3 + (on ? 0 : 1));
-    if (on) { cx.fillStyle = C.gold; cx.fillRect(x + 2, tY + 12, tWd - 4, 1); }
+    const x = X + 2 + i * 35, r = item(x, tY, 35, 15, () => { tab = id; confirmKey = null; sfx("click"); }, { on: tab === id, tip: label });
+    icon(ic, x + 14, tY + 4 + r.d);
   });
-  // content
-  const cY = Y + 54, cH = 100;
-  bevel(X, cY - 1, PW, cH + 2, C.panel);
-  ({ shop: paneShop, worlds: paneWorlds, codex: paneCodex, reforge: paneReforge, more: paneMore })[tab](X + 2, cY + 1, PW - 4, cH - 2, now);
-  // footer: dynamite
-  const fY = Y + 156;
-  button(X, fY, 50, 16, () => { if (S.dyn > 0) { armed = !armed; sfx("click"); } }, { on: armed, onCol: "#7a2a1a", disabled: S.dyn <= 0, tip: armed ? "CLICK THE MINE TO BLAST" : "ARM DYNAMITE" });
-  icon("dyn", X + 5, fY + 4);
-  txt("X" + S.dyn, X + 16, fY + 6, S.dyn > 0 ? C.ink : C.dim);
-  const dc = dynCost(), can = S.money >= dc;
-  button(X + 52, fY, PW - 52, 16, buyDyn, { disabled: !can, tip: "BUY ONE STICK OF DYNAMITE" });
-  txt("BUY", X + 57, fY + 6, can ? C.ink : C.dim);
-  txt("$" + fmt(dc), X + PW - 5, fY + 6, can ? C.gold : C.red, 1, "right");
+  const cY = Y + 42;
+  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, cY, PW - 4, 112, now);
+  // footer: world progress
+  const fY = Y + 157, w = W(), wi = worldOf(S.depth), into = S.depth - wi * LAYERS_PER_WORLD;
+  txt(w.name, X + 4, fY + 1, C.yellow);
+  txt(wi + 1 < WORLDS.length ? `${into}/100` : "ENDLESS", X + PW - 4, fY + 1, "#ffffff", 1, "right");
+  cx.fillStyle = C.purpleLo; cx.fillRect(X + 3, fY + 8, PW - 6, 5);
+  cx.fillStyle = C.yellow; cx.fillRect(X + 4, fY + 9, Math.round((PW - 8) * Math.min(1, into / 100)), 3);
+  region(X + 2, fY, PW - 4, 14, null, wi + 1 < WORLDS.length ? `NEXT WORLD AT DEPTH ${(wi + 1) * 100}` : "YOU REACHED THE VOID");
 }
-function paneShop(x, y, w) {
-  UPGRADES.forEach((u, i) => {
-    const l = S.up[u.id], max = u.max && l >= u.max, c = u.cost(l), can = !max && S.money >= c;
-    const iy = y + i * 16, d = button(x, iy, w, 15, () => buy(u.id), { disabled: !can });
-    if (pulse && pulse.id === u.id) { cx.fillStyle = `rgba(247,197,72,${pulse.t})`; cx.fillRect(x + 1, iy + 1, w - 2, 13); }
-    icon(u.icon, x + 3, iy + 4 + d);
-    txt(u.name, x + 13, iy + 2 + d, can || max ? C.ink : C.dim);
-    txt("LV" + l, x + 14 + tw(u.name) + 3, iy + 2 + d, C.dim);
-    txt(max ? "MAX" : "$" + fmt(c), x + w - 3, iy + 2 + d, max ? C.green : can ? C.gold : C.red, 1, "right");
-    txt(max ? "FULLY UPGRADED" : u.desc(l), x + 13, iy + 9 + d, C.dim);
+function paneEquip(x, y, w, h, now) {
+  const e = EQUIP[S.eq], nk = S.eq + 1;
+  txt("NOW USING", x + 3, y + 2, C.dim);
+  txt(e.name, x + 3, y + 9, "#ffffff");
+  txt("MAX DEPTH " + (isFinite(e.cap) ? e.cap : "INF"), x + w - 3, y + 9, blocked() ? C.red : C.yellow, 1, "right");
+  if (nk < EQUIP.length) {
+    const ne = EQUIP[nk], c = eqCost(nk), can = S.px >= c;
+    const r = item(x, y + 18, w, 54, buyEquip, { disabled: !can });
+    // preview on a little dirt strip
+    cx.fillStyle = r.sel ? "#e8cc20" : "#00000040"; cx.fillRect(x + 3, y + 21 + r.d, 38, 48);
+    cx.fillStyle = groundColor(ne.cap - 1); cx.fillRect(x + 3, y + 61 + r.d, 38, 8);
+    cx.save(); cx.translate(x + (ne.kind === "foot" ? 15 : 7), y + 61 + r.d);
+    const keep = S.eq; S.eq = nk; if (ne.kind === "foot") drawMiner(ne.tool, now); else drawVehicle(ne, now); S.eq = keep;
+    cx.restore();
+    txt("NEXT", x + 45, y + 22 + r.d, r.sel ? "#5a4a00" : C.dim);
+    txt(ne.name, x + 45, y + 29 + r.d, r.ink);
+    txt("MINE TO " + (isFinite(ne.cap) ? "DEPTH " + ne.cap : "ANY DEPTH"), x + 45, y + 39 + r.d, r.ink);
+    txt(`DIG X${fmt2(eqPower(nk) / eqPower(S.eq))} FASTER`, x + 45, y + 46 + r.d, r.ink);
+    txt("$" + fmt(c), x + w - 4, y + 61 + r.d, can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
+  } else {
+    item(x, y + 18, w, 54, null, { disabled: true });
+    txt("BEST EQUIPMENT OWNED", x + w / 2, y + 42, "#ffffff", 1, "center");
+  }
+  // tier chain
+  txt("EQUIPMENT " + (S.eq + 1) + "/" + EQUIP.length, x + 3, y + 76, C.dim);
+  EQUIP.forEach((q, i) => {
+    const sx = x + 3 + (i % 8) * 17, sy = y + 84 + Math.floor(i / 8) * 13;
+    cx.fillStyle = C.purpleLo; cx.fillRect(sx, sy, 15, 11);
+    cx.fillStyle = i <= S.eq ? C.yellow : i === nk ? ((now / 300 | 0) % 2 ? C.purpleHi : C.purple2) : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 13, 9);
+    if (i <= S.eq) txt(String(i + 1), sx + 8, sy + 3, C.black, 1, "center");
+    region(sx, sy, 15, 11, null, i <= S.eq || i === nk ? `${q.name} - DEPTH ${isFinite(q.cap) ? q.cap : "INF"}` : "???");
   });
 }
-function paneWorlds(x, y, w) {
-  WORLDS.forEach((wd, i) => {
-    const lock = i >= S.unlocked, here = i === S.world, iy = y + i * 14 - 1, ws = S.worlds[i];
-    const d = button(x, iy, w, 14, () => travel(i), { disabled: lock || here, on: here, onCol: "#2f3a2f",
-      tip: lock ? "BREAK THE PREVIOUS PORTAL" : here ? "YOU ARE HERE" : "TRAVEL HERE" });
-    icon(lock ? "lock" : "globe", x + 3, iy + 3 + d);
-    txt(lock ? "???" : wd.name, x + 13, iy + 2 + d, lock ? C.dim : C.ink);
-    txt(here ? "HERE" : lock ? "" : "GO", x + w - 3, iy + 2 + d, here ? C.green : C.gold, 1, "right");
-    txt(lock ? "LOCKED" : `BEST ${ws.max}/${wd.goal}M  VALUE X${fmt(wd.vm)}`, x + 13, iy + 8 + d, C.dim);
+function paneMult(x, y, w) {
+  MULTS.forEach((m, i) => {
+    const l = S.m[m.id], max = m.max && l >= m.max, locked = m.needVeh && S.eq < 3, c = m.cost(l), can = !max && !locked && S.px >= c;
+    const iy = y + i * 16, r = item(x, iy, w, 15, () => buyMult(m.id), { disabled: !can, tip: locked ? "NEEDS A VEHICLE" : null });
+    icon(m.icon, x + 3, iy + 4 + r.d);
+    txt(m.name, x + 13, iy + 2 + r.d, r.ink);
+    txt("LV" + l, x + 14 + tw(m.name) + 3, iy + 2 + r.d, r.sel ? "#6a5a00" : C.dim);
+    txt(max ? "MAX" : locked ? "LOCKED" : "$" + fmt(c), x + w - 3, iy + 2 + r.d, max ? C.green : can ? (r.sel ? C.black : C.yellow) : "#ff9ab0", 1, "right");
+    txt(m.desc(l), x + 13, iy + 9 + r.d, r.sel ? "#4a3a00" : C.dim);
   });
 }
-function paneCodex(x, y, w) {
-  txt("ORE CODEX", x + 3, y + 2, C.ink);
-  txt("BONUS X" + codexBonus().toFixed(2), x + w - 3, y + 2, C.gold, 1, "right");
-  WORLDS.forEach((wd, wi) => {
-    const iy = y + 10 + wi * 11, lock = wi >= S.unlocked;
-    txt(lock ? "???" : wd.name.split(" ").pop(), x + 3, iy + 2, lock ? C.dim : C.ink);
-    wd.ores.forEach((o, oi) => {
-      const sx = x + w - 3 - (7 - oi) * 10, found = S.codex[wi + ":" + oi];
-      bevel(sx, iy, 9, 9, found ? o[1] : "#1a1824", found ? "#ffffff88" : "#2f2c3c", "#0b0a10");
-      if (!found) txt("?", sx + 3, iy + 2, "#4a4660");
-      region(sx, iy, 9, 9, null, lock ? "???" : found ? o[0] + "  X" + o[2] : `??? (FOUND BELOW ${Math.ceil(o[4] * wd.goal)}M)`);
-    });
+function paneTreasure(x, y, w) {
+  const tot = invTotal();
+  let r = item(x, y, w, 16, sellAll, { disabled: !tot });
+  icon("coin", x + 4, y + 5 + r.d);
+  txt("SELL ALL", x + 15, y + 6 + r.d, r.ink);
+  txt("$" + fmt(tot), x + w - 4, y + 6 + r.d, r.sel ? C.black : C.yellow, 1, "right");
+  const keys = Object.keys(S.inv).sort((a, b) => S.inv[b].v - S.inv[a].v);
+  if (!keys.length) {
+    ["DIG TO FIND TREASURE.", "THE MINER GRABS IT", "WHEN THE LAYER IS DUG.", "", "DEEPER LAYERS HOLD", "PRICIER LOOT."].forEach((l, i) => txt(l, x + w / 2, y + 26 + i * 8, "#ffffff", 1, "center"));
+  }
+  keys.slice(0, 7).forEach((k, i) => {
+    const [wi, ii] = k.split(":").map(Number), it = WORLDS[wi].loot[ii], st = S.inv[k], iy = y + 18 + i * 12;
+    const rr = item(x, iy, w, 12, () => sell(k), { tip: "CLICK TO SELL" });
+    gem(it[1], it[2], x + 3, iy + 3 + rr.d);
+    txt(it[0] + " X" + st.n, x + 13, iy + 4 + rr.d, rr.ink);
+    txt("$" + fmt(st.v), x + w - 3, iy + 4 + rr.d, rr.sel ? C.black : C.yellow, 1, "right");
   });
-  txt("+2% PER ORE, +10% PER WORLD", x + w / 2, y + 90, C.dim, 1, "center");
-}
-function paneReforge(x, y, w) {
-  const g = pendingShards();
-  icon("shard", x + 3, y + 3, 2);
-  txt("ANCIENT SHARDS", x + 21, y + 3, C.ink);
-  txtS(fmt(S.shards), x + 21, y + 10, C.purple, 1);
-  txt("X" + bonusMult().toFixed(1) + " ORE VALUE", x + w - 3, y + 10, C.gold, 1, "right");
-  const lines = wrap("Melt your gear into shards. Each shard: +10% ore value, forever. Resets money, upgrades and mines. Keeps shards, worlds and codex.", w - 6);
-  lines.forEach((l, i) => txt(l, x + 3, y + 22 + i * 7, C.dim));
-  txt("THIS RUN: $" + fmt(S.runEarned), x + 3, y + 62, C.ink);
-  const conf = confirmKey === "reforge";
-  const d = button(x + 2, y + 74, w - 4, 20, reforge, { disabled: g < 1, on: conf, onCol: "#7a2a3a" });
-  txt(g < 1 ? `EARN $${fmt(1e5)} TO REFORGE` : conf ? "CLICK AGAIN TO CONFIRM" : `REFORGE: +${fmt(g)} SHARDS`, x + w / 2, y + 79 + d, g < 1 ? C.dim : conf ? "#ffffff" : C.gold, 1, "center");
-  if (g >= 1) txt(`X${bonusMult().toFixed(1)} > X${(1 + (S.shards + g) * .1).toFixed(1)}`, x + w / 2, y + 86 + d, C.dim, 1, "center");
+  if (keys.length > 7) txt(`+${keys.length - 7} MORE (SELL ALL)`, x + w / 2, y + 104, C.dim, 1, "center");
 }
 function paneMore(x, y, w) {
-  const st = S.stats;
-  [["PLAY TIME", (st.time / 3600).toFixed(1) + "H"], ["BLOCKS MINED", fmt(st.blocks)], ["ORES MINED", fmt(st.ores)],
-   ["CHESTS FOUND", fmt(st.chests)], ["REFORGES", st.reforges], ["TOTAL EARNED", "$" + fmt(S.totalEarned)]].forEach(([k, v], i) => {
-    txt(k, x + 3, y + 3 + i * 8, C.dim); txt(v, x + w - 3, y + 3 + i * 8, C.ink, 1, "right");
+  const nFound = Object.keys(S.found).length;
+  txt("COLLECTION " + nFound + "/" + WORLDS.length * 5, x + 3, y + 2, "#ffffff");
+  WORLDS.forEach((wd, wi) => {
+    const iy = y + 10 + wi * 9, seen = S.depth >= wi * LAYERS_PER_WORLD;
+    txt(seen ? wd.name.split(" ").pop() : "???", x + 3, iy + 2, seen ? C.dim : "#9a5aaa");
+    wd.loot.forEach((it, i) => {
+      const sx = x + w - 3 - (5 - i) * 10, f = S.found[wi + ":" + i];
+      cx.fillStyle = C.purpleLo; cx.fillRect(sx, iy, 9, 9);
+      if (f) gem(it[1], it[2], sx + 1, iy + 1); else txt("?", sx + 3, iy + 2, "#9a5aaa");
+      region(sx, iy, 9, 9, null, f ? it[0] : "???");
+    });
   });
-  let d = button(x + 2, y + 54, w - 4, 15, () => { S.sound = !S.sound; sfx("click"); });
-  icon("sound", x + 6, y + 58 + d);
-  txt("SOUND: " + (S.sound ? "ON" : "OFF"), x + 17, y + 59 + d, S.sound ? C.ink : C.dim);
+  let r = item(x, y + 76, w, 14, () => { S.sound = !S.sound; sfx("click"); });
+  txt("SOUND: " + (S.sound ? "ON" : "OFF"), x + 5, y + 81 + r.d, r.ink);
+  txt((S.stats.time / 3600).toFixed(1) + "H PLAYED", x + w - 4, y + 81 + r.d, r.sel ? C.black : C.dim, 1, "right");
   const step = confirmKey === "reset2" ? 2 : confirmKey === "reset1" ? 1 : 0;
-  d = button(x + 2, y + 72, w - 4, 15, () => {
-    if (step === 2) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = freshRun(); cur = null; camY = drawY = 0; drawX = 4; confirmKey = null; toast("SAVE DELETED", C.red); }
+  r = item(x, y + 93, w, 14, () => {
+    if (step === 2) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} S = freshState(); confirmKey = null; camY = PIT0 - 100; toast("SAVE DELETED", C.red); }
     else confirmKey = step ? "reset2" : "reset1";
-  }, { on: step > 0, onCol: "#7a2a2a" });
-  txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 77 + d, C.red, 1, "center");
-  txt("AUTOSAVES. ROBOTS EARN WHILE AWAY.", x + w / 2, y + 91, C.dim, 1, "center");
+  }, { on: step > 0 });
+  txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 98 + r.d, r.sel ? "#a01010" : "#ff9ab0", 1, "center");
 }
-function drawToast(now) {
+function drawToast() {
   if (!toastMsg) return;
-  const a = Math.min(1, toastMsg.t * 2);
-  if (a <= 0) return;
-  cx.globalAlpha = a;
-  const wd = tw(toastMsg.text) + 14, x = Math.round(LW / 2 - wd / 2), y = 3;
-  bevel(x, y, wd, 13, "#1f1c2b", toastMsg.col, C.lo);
-  txt(toastMsg.text, LW / 2, y + 4, toastMsg.col, 1, "center");
+  cx.globalAlpha = Math.min(1, toastMsg.t * 2);
+  const wd = tw(toastMsg.text) + 12, x = Math.round(LW / 2 - wd / 2), y = 2;
+  cx.fillStyle = "#000"; cx.fillRect(x, y, wd, 11);
+  cx.fillStyle = C.purple; cx.fillRect(x + 1, y + 1, wd - 2, 9);
+  txt(toastMsg.text, LW / 2, y + 3, toastMsg.col, 1, "center");
   cx.globalAlpha = 1;
 }
 function drawTip() {
@@ -698,8 +751,9 @@ function drawTip() {
   let x = mouse.x + 6, y = mouse.y + 8;
   if (x + wd > LW - 2) x = LW - 2 - wd;
   if (y + 11 > LH - 2) y = mouse.y - 14;
-  bevel(x, y, wd, 11, "#0f0e15", "#4f4a66", "#000");
-  txt(tip, x + 4, y + 3, C.ink);
+  cx.fillStyle = "#000"; cx.fillRect(x, y, wd, 11);
+  cx.fillStyle = C.yellow; cx.fillRect(x + 1, y + 1, wd - 2, 9);
+  txt(tip, x + 4, y + 3, C.black);
 }
 function drawModal() {
   if (!modal) return;
@@ -707,36 +761,31 @@ function drawModal() {
   const wd = Math.min(LW - 16, 200), lines = [];
   modal.body.forEach((p, i) => { if (i) lines.push(""); lines.push(...wrap(p, wd - 16)); });
   const h = 34 + lines.length * 7 + 22, x = Math.round((LW - wd) / 2), y = Math.round((LH - h) / 2);
-  bevel(x - 1, y - 1, wd + 2, h + 2, "#000", "#000", "#000");
-  bevel(x, y, wd, h, C.panel);
-  txtS(modal.title, x + wd / 2, y + 8, C.gold, 2, "center");
-  lines.forEach((l, i) => txt(l, x + 8, y + 26 + i * 7, C.ink));
-  const d = button(x + wd / 2 - 25, y + h - 20, 50, 15, () => { modal = null; sfx("click"); });
-  txt("OK", x + wd / 2, y + h - 15 + d, C.gold, 1, "center");
+  panelBg(x, y, wd, h);
+  cx.fillStyle = C.yellow; cx.fillRect(x + 1, y + 1, wd - 2, 20);
+  txt(modal.title, x + wd / 2, y + 6, C.black, 2, "center");
+  lines.forEach((l, i) => txt(l, x + 8, y + 27 + i * 7, "#ffffff"));
+  const r = item(x + wd / 2 - 25, y + h - 19, 50, 14, () => { modal = null; sfx("click"); });
+  txt("OK", x + wd / 2, y + h - 14 + r.d, r.ink, 1, "center");
 }
 function drawCursor() {
   if (!mouse) return;
   const x = Math.round(mouse.x), y = Math.round(mouse.y);
   cx.fillStyle = "#000";
   cx.fillRect(x - 1, y - 1, 3, 9); cx.fillRect(x - 1, y - 1, 9, 3);
-  cx.fillStyle = mouseDown ? C.gold : "#ffffff";
+  cx.fillStyle = mouseDown ? C.yellow : "#ffffff";
   cx.fillRect(x, y, 1, 7); cx.fillRect(x, y, 7, 1);
 }
-function toast(text, col = C.ink) { toastMsg = { text: String(text).toUpperCase(), col, t: 2.6 }; }
+function toast(text, col = "#ffffff") { toastMsg = { text: String(text).toUpperCase(), col, t: 2.6 }; }
 function showModal(title, body) { modal = { title, body }; holding = false; }
 
 // ================================================================ input
-let holding = false, mouseDown = false, nextSwing = 0;
+let holding = false, nextClick = 0;
 function toLogical(e) {
   const r = cv.getBoundingClientRect();
   return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
 }
-function mineTile(m, clamp) {
-  let mx = m.x - L.sx, my = m.y - L.sy;
-  if (!clamp && (mx < 0 || my < 0 || mx >= VW || my >= VH)) return null;
-  mx = Math.max(0, Math.min(VW - 1, mx)); my = Math.max(0, Math.min(VH - 1, my));
-  return [Math.floor(mx / T), Math.floor((my + camY * T) / T)];
-}
+const inScene = m => m.x >= L.sx && m.x < L.sx + VW && m.y >= L.sy && m.y < L.sy + VH;
 cv.addEventListener("pointerdown", e => {
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
   mouse = toLogical(e); mouseDown = true;
@@ -745,10 +794,9 @@ cv.addEventListener("pointerdown", e => {
     if (mouse.x >= r.x && mouse.x < r.x + r.w && mouse.y >= r.y && mouse.y < r.y + r.h) { if (r.fn) r.fn(); return; }
   }
   if (modal) return;
-  const t = mineTile(mouse);
-  if (!t) { if (confirmKey) confirmKey = null; return; }
-  if (armed) { dynamite(t[0], t[1]); return; }
-  holding = true; nextSwing = 0;
+  if (!inScene(mouse)) { confirmKey = null; return; }
+  if (golden && Math.abs(mouse.x - L.sx - golden.x) < 8 && Math.abs(mouse.y - L.sy - golden.y) < 8) { clickGolden(); return; }
+  holding = true; nextClick = 0;
 });
 cv.addEventListener("pointermove", e => { mouse = toLogical(e); });
 addEventListener("pointerup", () => { holding = false; mouseDown = false; });
@@ -756,36 +804,26 @@ cv.addEventListener("pointerleave", () => { if (!holding) mouse = null; });
 cv.addEventListener("contextmenu", e => e.preventDefault());
 
 // ================================================================ loop
-let lastT = performance.now(), drillAcc = 0, saveAcc = 0, fallAcc = 0;
+let lastT = performance.now(), saveAcc = 0;
 function update(dt, now) {
-  const ws = WS();
   S.stats.time += dt;
-  hover = mouse ? mineTile(mouse, holding) : null;
-  if (holding && hover && !modal && now >= nextSwing) {
-    const r = act(hover[0], hover[1]);
-    const iv = 1000 / swingRate(S.up.speed);
-    nextSwing = now + (r === "move" ? Math.min(iv, 110) : iv);
-  }
-  fallAcc += dt;
-  if (!solid(ws.x, ws.y + 1) && fallAcc > 0.05) { ws.y++; fallAcc = 0; }
-  if (ws.y > ws.max) ws.max = ws.y;
-  const dr = drillRate(S.up.drill);
-  if (dr > 0) {
-    drillAcc += dt * dr;
-    while (drillAcc >= 1) { drillAcc--; if (solid(ws.x, ws.y + 1)) hit(ws.x, ws.y + 1, pickDmg(S.up.pick), true); }
-  }
-  if (S.up.robots) earn(robotIncome(S.up.robots) * dt);
-  drawX += (ws.x - drawX) * Math.min(1, dt * 18);
-  drawY += (ws.y - drawY) * Math.min(1, dt * 18);
-  if (Math.abs(ws.y - drawY) > 6) drawY = ws.y;
-  camY += (drawY - PLAYER_ROW - camY) * Math.min(1, dt * 8);
-  if (camY < -0.5) camY = -0.5;
-  swingAnim = Math.max(0, swingAnim - dt * 6);
+  if (holding && !modal && now >= nextClick) { clickDig(); nextClick = now + 125; }
+  if (!modal) dig(power() * dt);
+  ppsShown += (earnedFrame / Math.max(dt, 1e-3) - ppsShown) * Math.min(1, dt * 1.5);
+  earnedFrame = 0;
+  frenzy = Math.max(0, frenzy - dt);
+  if (goldenMsg && (goldenMsg.t -= dt) <= 0) goldenMsg = null;
+  if (golden) { if ((golden.t -= dt) <= 0) golden = null; }
+  else if ((goldenTimer -= dt) <= 0) { golden = { x: 15 + Math.random() * (VW - 30), y: HUD_H + 12 + Math.random() * (VH - HUD_H - 30), t: 9 }; goldenTimer = 50 + Math.random() * 70; }
+  const target = PIT0 + S.depth * ROW - 100;
+  camY += (target - camY) * Math.min(1, dt * 6);
+  if (Math.abs(target - camY) > 60) camY = target;
+  digAnim = Math.max(0, digAnim - dt * 7);
   shake = Math.max(0, shake - dt * 30);
-  if (pulse && (pulse.t -= dt) <= 0) pulse = null;
   if (toastMsg && (toastMsg.t -= dt) <= 0) toastMsg = null;
-  for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.l -= dt; if (p.l <= 0) fx.splice(i, 1); }
-  for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.y -= 14 * dt; p.l -= dt; if (p.l <= 0) pops.splice(i, 1); }
+  if (!blocked() && Math.random() < dt * 6) debris(frontX(), gyScreen(S.depth) + 2, groundColor(S.depth), 1);
+  for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 240 * dt; p.l -= dt; if (p.l <= 0) fx.splice(i, 1); }
+  for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.y -= 16 * dt; p.l -= dt; if (p.l <= 0) pops.splice(i, 1); }
   saveAcc += dt; if (saveAcc > 10) { saveAcc = 0; save(); }
 }
 function frame(now) {
@@ -794,10 +832,13 @@ function frame(now) {
   regions = []; tip = null;
   drawBackground();
   drawWatch();
-  drawMine(now);
+  const sh = shake > 0 ? Math.round((Math.random() - .5) * shake) : 0;
+  cx.save(); cx.beginPath(); cx.rect(L.sx, L.sy, VW, VH); cx.clip(); cx.translate(L.sx + sh, L.sy);
+  drawScene(now);
+  cx.restore();
   if (modal) { const keep = mouse; mouse = null; drawPanel(now); mouse = keep; regions = []; }
   else drawPanel(now);
-  drawToast(now);
+  drawToast();
   drawTip();
   drawModal();
   drawCursor();
@@ -813,19 +854,22 @@ function fmt(n) {
   if (e < u.length) { const m = n / Math.pow(1000, e); return m.toFixed(m < 100 ? 2 : 1) + u[e]; }
   return n.toExponential(2).replace("+", "").toUpperCase();
 }
+// full digits with commas, like the original HUD, until it no longer fits
+const fmtC = n => n < 1e12 ? Math.floor(n).toLocaleString("en-US") : fmt(n);
+const fmt2 = n => n < 100 ? n.toFixed(2).replace(/\.?0+$/, "") : fmt(n);
 addEventListener("beforeunload", save);
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
 
 // ================================================================ boot
 layout();
 if (load()) {
-  const away = Math.min((Date.now() - S.last) / 1000, 8 * 3600);
-  const gain = robotIncome(S.up.robots) * away * 0.5;
-  if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your robots mined $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
+  const away = Math.min((Date.now() - S.last) / 1000, 12 * 3600), frac = S.m.shift * .1;
+  const gain = power() * pixVal(S.depth) * away * frac;
+  if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your night shift dug up $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
 } else {
-  showModal("PEBBLE MINER", ["Click or hold on the rock to dig. Your miner digs toward wherever you point.", "Ore pays out instantly. Buy upgrades, reach the portal at the bottom of each world and unlock the next.", "Seven worlds. Infinite depth. Good luck!"]);
+  showModal("PEBBLE MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Equipment lets you dig deeper. Multipliers dig quicker. Sell the treasure you find.", "Seven worlds lie below. Good luck!"]);
 }
-drawX = WS().x; drawY = WS().y; camY = drawY - PLAYER_ROW;
+camY = PIT0 + S.depth * ROW - 100;
 requestAnimationFrame(frame);
 </script>
 </body>
