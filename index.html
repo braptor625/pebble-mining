@@ -5,112 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pebble Miner</title>
 <style>
-  :root {
-    --bg: #1b1d22; --panel: #262932; --panel2: #2f333e; --ink: #e9e6dc; --dim: #9a978d;
-    --accent: #f2c14e; --good: #6fcf6b; --bad: #e0605a; --line: #3b404d;
-  }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; user-select: none; }
-  #app { display: flex; gap: 24px; justify-content: center; align-items: flex-start; padding: 20px 16px; flex-wrap: wrap; }
-
-  /* Pebble watch frame */
-  .watch { position: relative; padding: 46px 30px; background: linear-gradient(160deg, #3d424d, #22252c);
-    border-radius: 42px; box-shadow: 0 18px 40px #0008, inset 0 2px 0 #fff2, inset 0 -3px 0 #0006; }
-  .watch::before, .watch::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%);
-    width: 62%; height: 40px; background: #15161a; border-radius: 6px; }
-  .watch::before { top: -32px; } .watch::after { bottom: -32px; }
-  .btn-side { position: absolute; width: 8px; height: 46px; background: #4a4f5c; border-radius: 3px; }
-  .btn-side.l { left: -6px; top: 120px; }
-  .btn-side.r1 { right: -6px; top: 80px; } .btn-side.r2 { right: -6px; top: 210px; } .btn-side.r3 { right: -6px; top: 340px; }
-  .screen { background: #000; padding: 6px; border-radius: 6px; box-shadow: inset 0 0 0 2px #111; }
-  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; cursor: pointer;
-    width: 432px; height: 504px; touch-action: none; }
-  .brand { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: 3px; color: #8a8f9c; }
-
-  /* side panel */
-  .side { width: 400px; max-width: 100%; }
-  .hud { background: var(--panel); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
-  .money { font-size: 26px; color: var(--accent); font-weight: bold; }
-  .sub { color: var(--dim); font-size: 12px; }
-  .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
-  .bar { height: 8px; background: #16181d; border-radius: 4px; overflow: hidden; margin-top: 6px; }
-  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #8b5cf6, #f2c14e); width: 0; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-  .tab { flex: 1; text-align: center; padding: 8px 0; background: var(--panel); border-radius: 8px; cursor: pointer; color: var(--dim); }
-  .tab.on { background: var(--panel2); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
-  .pane { background: var(--panel); border-radius: 12px; padding: 10px; min-height: 380px; }
-  .item { background: var(--panel2); border-radius: 10px; padding: 9px 11px; margin-bottom: 7px; cursor: pointer;
-    border: 1px solid transparent; transition: transform .05s; }
-  .item:hover { border-color: var(--line); }
-  .item:active { transform: scale(.985); }
-  .item.no { opacity: .5; cursor: default; }
-  .item.max { opacity: .6; cursor: default; }
-  .item .t { font-weight: bold; }
-  .item .cost { color: var(--accent); font-weight: bold; white-space: nowrap; }
-  .item.no .cost { color: var(--bad); }
-  .item .d { color: var(--dim); font-size: 12px; margin-top: 2px; }
-  .lv { color: var(--dim); font-weight: normal; font-size: 12px; }
-  .ore-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin: 6px 0 12px; }
-  .ore { background: var(--panel2); border-radius: 6px; padding: 5px 6px; font-size: 11px; display: flex; gap: 6px; align-items: center; }
-  .sw { width: 12px; height: 12px; border-radius: 2px; flex: none; box-shadow: inset 0 0 0 1px #0005; }
-  h3 { margin: 6px 2px 4px; font-size: 13px; }
-  .big { width: 100%; padding: 12px; border-radius: 10px; border: 0; font: inherit; font-weight: bold; cursor: pointer;
-    background: var(--accent); color: #222; margin-top: 8px; }
-  .big:disabled { background: #555; color: #999; cursor: default; }
-  .big.red { background: var(--bad); color: #fff; }
-  .toast { position: fixed; left: 50%; top: 18px; transform: translateX(-50%); background: #111c; border: 1px solid var(--line);
-    padding: 10px 16px; border-radius: 10px; pointer-events: none; transition: opacity .4s; z-index: 5; text-align: center; }
-  .modal { position: fixed; inset: 0; background: #000a; display: none; align-items: center; justify-content: center; z-index: 10; }
-  .modal.on { display: flex; }
-  .modal .box { background: var(--panel); border-radius: 14px; padding: 22px; max-width: 360px; text-align: center; margin: 16px; }
-  .modal h2 { margin: 0 0 8px; color: var(--accent); }
-  .tool { display: flex; gap: 6px; margin-top: 8px; }
-  .tool .item { flex: 1; margin: 0; text-align: center; }
-  .tool .item.on { border-color: var(--accent); }
-  @media (max-width: 520px) {
-    canvas { width: 288px; height: 336px; }
-    .watch { padding: 34px 18px; border-radius: 30px; }
-    .btn-side { display: none; }
-  }
+  html, body { margin: 0; height: 100%; background: #14121c; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; cursor: none; }
 </style>
 </head>
 <body>
-<div id="app">
-  <div class="watch">
-    <div class="btn-side l"></div><div class="btn-side r1"></div><div class="btn-side r2"></div><div class="btn-side r3"></div>
-    <div class="screen"><canvas id="c" width="144" height="168"></canvas></div>
-    <div class="brand">PEBBLE MINER</div>
-  </div>
-  <div class="side">
-    <div class="hud">
-      <div class="row"><div class="money" id="money">$0</div><div class="sub" id="income"></div></div>
-      <div class="row sub"><span id="worldName"></span><span id="depth"></span></div>
-      <div class="bar"><i id="goalBar"></i></div>
-      <div class="sub" id="goalText" style="margin-top:4px"></div>
-      <div class="tool">
-        <div class="item" id="dynBtn"><span class="t">Dynamite</span> <span class="lv" id="dynCount"></span></div>
-        <div class="item" id="dynBuy"><span class="t">Buy</span> <span class="cost" id="dynCost"></span></div>
-      </div>
-    </div>
-    <div class="tabs">
-      <div class="tab on" data-tab="shop">Shop</div>
-      <div class="tab" data-tab="worlds">Worlds</div>
-      <div class="tab" data-tab="codex">Codex</div>
-      <div class="tab" data-tab="reforge">Reforge</div>
-      <div class="tab" data-tab="more">More</div>
-    </div>
-    <div class="pane" id="pane"></div>
-  </div>
-</div>
-<div class="toast" id="toast" style="opacity:0"></div>
-<div class="modal" id="modal"><div class="box"><h2 id="mTitle"></h2><div id="mBody"></div><button class="big" id="mOk">OK</button></div></div>
-
+<canvas id="c"></canvas>
 <script>
 "use strict";
-// ---------------------------------------------------------------- constants
+// ================================================================ constants
 const VW = 144, VH = 168, T = 16, COLS = 9, PLAYER_ROW = 3;
 const SAVE_KEY = "pebbleMinerSave.v1";
+const C = {
+  bg: "#14121c", bg2: "#1b1826", panel: "#2a2738", panel2: "#353147", hi: "#4f4a66", lo: "#15131c",
+  ink: "#ece6d6", dim: "#8f8aa3", gold: "#f7c548", red: "#e8615a", green: "#7ed66b", purple: "#a77bf3", pink: "#ff7bff",
+};
 
 // Each world: palette + ore list. Ore: [name, color, value multiplier, chance, min depth fraction of goal]
 const WORLDS = [
@@ -148,25 +58,25 @@ const WORLDS = [
 const hpCurve = d => (1 + d / 6) * Math.pow(1.012, d);
 const valCurve = d => (1 + d / 7) * Math.pow(1.013, d);
 WORLDS.forEach((w, i) => {
-  w.hm = i ? WORLDS[i - 1].hm * hpCurve(WORLDS[i - 1].goal) * 0.6 : 1;
+  w.hm = i ? WORLDS[i - 1].hm * hpCurve(WORLDS[i - 1].goal) * 2.2 : 1;
   w.vm = i ? WORLDS[i - 1].vm * valCurve(WORLDS[i - 1].goal) * 0.75 : 1;
 });
 
 const UPGRADES = [
-  { id: "pick", name: "Pickaxe", desc: l => `Damage ${fmt(pickDmg(l))} → ${fmt(pickDmg(l + 1))}`, cost: l => 8 * Math.pow(1.24, l) },
-  { id: "speed", name: "Swift Gloves", max: 24, desc: l => `${swingRate(l).toFixed(1)} → ${swingRate(l + 1).toFixed(1)} swings/sec while holding`, cost: l => 40 * Math.pow(1.9, l) },
-  { id: "luck", name: "Lucky Lantern", max: 50, desc: l => `Ore chance x${luckMult(l).toFixed(2)} → x${luckMult(l + 1).toFixed(2)}`, cost: l => 60 * Math.pow(1.55, l) },
-  { id: "refine", name: "Refinery", desc: l => `Ore value x${refineMult(l).toFixed(2)} → x${refineMult(l + 1).toFixed(2)}`, cost: l => 100 * Math.pow(1.45, l) },
-  { id: "drill", name: "Auto-Drill", max: 20, desc: l => `Digs below you ${drillRate(l).toFixed(1)} → ${drillRate(l + 1).toFixed(1)} hits/sec`, cost: l => 250 * Math.pow(1.8, l) },
-  { id: "robots", name: "Mining Robot", desc: l => `${l} robots · +${fmt(robotIncome(l + 1) - robotIncome(l))}/sec more`, cost: l => 150 * Math.pow(1.16, l) },
+  { id: "pick", name: "Pickaxe", icon: "pick", desc: l => `DMG ${fmt(pickDmg(l))} > ${fmt(pickDmg(l + 1))}`, cost: l => 8 * Math.pow(1.5, l) },
+  { id: "speed", name: "Swift Gloves", icon: "glove", max: 24, desc: l => `${swingRate(l).toFixed(1)} > ${swingRate(l + 1).toFixed(1)} SWINGS/SEC`, cost: l => 40 * Math.pow(1.9, l) },
+  { id: "luck", name: "Lucky Lantern", icon: "lamp", max: 50, desc: l => `ORE CHANCE X${luckMult(l).toFixed(2)} > X${luckMult(l + 1).toFixed(2)}`, cost: l => 60 * Math.pow(1.55, l) },
+  { id: "refine", name: "Refinery", icon: "gem", desc: l => `ORE VALUE X${refineMult(l).toFixed(2)} > X${refineMult(l + 1).toFixed(2)}`, cost: l => 100 * Math.pow(1.45, l) },
+  { id: "drill", name: "Auto-Drill", icon: "drill", max: 20, desc: l => `${drillRate(l).toFixed(1)} > ${drillRate(l + 1).toFixed(1)} AUTO HITS/SEC`, cost: l => 250 * Math.pow(1.8, l) },
+  { id: "robots", name: "Robots", icon: "bot", desc: l => `+$${fmt(robotIncome(l + 1) - robotIncome(l))}/SEC EACH`, cost: l => 150 * Math.pow(1.16, l) },
 ];
-const pickDmg = l => (1 + l * 0.5) * Math.pow(1.17, l) * bonusMult();
+const pickDmg = l => (1 + l * 0.5) * Math.pow(1.17, l);
 const swingRate = l => 3 + l * 0.5;
 const luckMult = l => 1 + l * 0.08;
 const refineMult = l => 1 + l * 0.25;
 const drillRate = l => l * 0.6;
 
-// ---------------------------------------------------------------- state
+// ================================================================ state
 let S;
 function freshRun(keep) {
   return {
@@ -198,11 +108,12 @@ function codexBonus() {
 const bonusMult = () => 1 + S.shards * 0.1;
 const valueMult = () => refineMult(S.up.refine) * bonusMult() * codexBonus();
 function baseValue(wi, d) { return 2 * WORLDS[wi].vm * valCurve(d); }
-function baseHp(wi, d) { return 2 * WORLDS[wi].hm * hpCurve(d); }
+function baseHp(wi, d) { return 5 * WORLDS[wi].hm * hpCurve(d); }
 function robotIncome(n) { return n * 0.05 * baseValue(S.world, Math.max(WS().max, 1)) * valueMult() * (1 + Math.floor(n / 25) * 0.5); }
 function dynCost() { return 30 * baseValue(S.world, Math.max(WS().y, 1)) * valueMult(); }
+const pendingShards = () => Math.floor(Math.sqrt(S.runEarned / 1e5));
 
-// ---------------------------------------------------------------- mine generation
+// ================================================================ mine generation
 function hash(x, y, s) {
   let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
@@ -240,10 +151,10 @@ function tileValue(t, y) {
   return b * 0.15;
 }
 
-// ---------------------------------------------------------------- game actions
-let cur = null; // current block being damaged {x,y,dmg,max}
+// ================================================================ game actions
+let cur = null; // block currently being damaged {x,y,w,dmg,max}
 const fx = [], pops = [];
-let shake = 0;
+let shake = 0, armed = false, swingAnim = 0;
 
 function earn(v) { S.money += v; S.runEarned += v; S.totalEarned += v; }
 
@@ -268,35 +179,34 @@ function breakTile(x, y, t) {
     S.stats.ores++;
     pop(x, y, "+" + fmt(v), o[1]);
     sfx(t.i >= 4 ? "rare" : "ore");
-    if (!S.codex[key]) { S.codex[key] = 1; toast(`New ore discovered: <b style="color:${o[1]}">${o[0]}</b>`); }
+    if (!S.codex[key]) { S.codex[key] = 1; toast("NEW ORE: " + o[0], o[1]); }
   } else if (t.k === "chest") {
     S.stats.chests++;
     const d = 1 + (hash(x, y, 99) * 3 | 0);
     S.dyn += d;
-    pop(x, y, "+" + fmt(v), "#ffd23f");
-    toast(`Treasure chest! +${fmt(v)} and ${d} dynamite`);
+    pop(x, y, "+" + fmt(v), C.gold);
+    toast(`TREASURE! +$${fmt(v)} & ${d} DYNAMITE`, C.gold);
     sfx("rare");
   } else if (t.k === "portal") {
-    pop(x, y, "+" + fmt(v), "#ff7bff");
+    pop(x, y, "+" + fmt(v), C.pink);
     sfx("portal"); shake = 10;
     if (S.world + 1 < WORLDS.length && S.unlocked <= S.world + 1) {
       S.unlocked = S.world + 2;
-      showModal("Portal opened!", `You broke through the core of <b>${W().name}</b>.<br><br>A new world awaits: <b>${WORLDS[S.world + 1].name}</b>.<br>Ores there are worth far more — but the rock is tougher.<br><br>Travel from the <b>Worlds</b> tab whenever you're ready.`);
+      showModal("PORTAL OPENED!", [`You broke through the core of ${W().name}.`, `A new world awaits: ${WORLDS[S.world + 1].name}. Its ores are worth far more, but the rock is tougher.`, "Travel from the globe tab whenever you're ready."]);
     } else if (S.world === WORLDS.length - 1 && !S.won) {
       S.won = true;
-      showModal("The heart of the Void", `You've dug through all seven worlds. Legendary.<br><br>The mines go on forever — keep digging, Reforge for shards, and complete your Codex.`);
+      showModal("HEART OF THE VOID", ["You dug through all seven worlds. Legendary.", "The mines go on forever. Keep digging, reforge for shards and complete your codex."]);
     }
   } else {
-    if (Math.random() < 0.3) pop(x, y, "+" + fmt(v), "#ddd");
+    if (Math.random() < 0.3) pop(x, y, "+" + fmt(v), "#dddddd");
     sfx("break");
   }
 }
-function act(tx, ty) {
-  // one step of "go toward / dig toward" the clicked tile
+// one step of "go toward / dig toward" the pointed tile; returns [nx,ny,isSolid] or null
+function stepToward(tx, ty) {
   const ws = WS(), px = ws.x, py = ws.y;
   if (tx === px && ty === py) return null;
-  const dx = Math.sign(tx - px), dy = Math.sign(ty - py);
-  const opts = [];
+  const dx = Math.sign(tx - px), dy = Math.sign(ty - py), opts = [];
   if (dy > 0 && Math.abs(ty - py) >= Math.abs(tx - px)) opts.push([0, 1]);
   if (dx) opts.push([dx, 0]);
   if (dy > 0) opts.push([0, 1]);
@@ -304,35 +214,22 @@ function act(tx, ty) {
   for (const [ox, oy] of opts) {
     const nx = px + ox, ny = py + oy;
     if (nx < 0 || nx >= COLS || ny < 0) continue;
-    if (solid(nx, ny)) { hit(nx, ny, pickDmg(S.up.pick)); swingAnim = 1; return "hit"; }
+    if (solid(nx, ny)) return [nx, ny, true];
     if (oy < 0) continue; // can't climb, gravity wins
-    ws.x = nx; ws.y = ny; return "move";
+    return [nx, ny, false];
   }
   return null;
 }
-function nextTarget(tx, ty) {
-  // used for the hover outline: which tile would act() hit
-  const ws = WS(), px = ws.x, py = ws.y;
-  if (tx === px && ty === py) return null;
-  const dx = Math.sign(tx - px), dy = Math.sign(ty - py);
-  const opts = [];
-  if (dy > 0 && Math.abs(ty - py) >= Math.abs(tx - px)) opts.push([0, 1]);
-  if (dx) opts.push([dx, 0]);
-  if (dy > 0) opts.push([0, 1]);
-  if (dy < 0) opts.push([0, -1]);
-  for (const [ox, oy] of opts) {
-    const nx = px + ox, ny = py + oy;
-    if (nx < 0 || nx >= COLS || ny < 0) continue;
-    if (solid(nx, ny)) return [nx, ny];
-    if (oy < 0) continue;
-    return [nx, ny];
-  }
-  return null;
+function act(tx, ty) {
+  const s = stepToward(tx, ty);
+  if (!s) return null;
+  if (s[2]) { hit(s[0], s[1], pickDmg(S.up.pick)); swingAnim = 1; return "hit"; }
+  WS().x = s[0]; WS().y = s[1]; return "move";
 }
 function dynamite(tx, ty) {
   const ws = WS();
   if (S.dyn <= 0) return;
-  if (Math.abs(tx - ws.x) > 4 || Math.abs(ty - ws.y) > 4 || ty < 1) { toast("Too far away — dynamite must be within 4 tiles"); return; }
+  if (Math.abs(tx - ws.x) > 4 || Math.abs(ty - ws.y) > 4 || ty < 1) { toast("TOO FAR - STAY WITHIN 4 TILES", C.red); return; }
   S.dyn--; armed = false; shake = 8; sfx("boom");
   for (let y = ty - 1; y <= ty + 1; y++) for (let x = tx - 1; x <= tx + 1; x++) {
     if (!solid(x, y)) continue;
@@ -340,15 +237,37 @@ function dynamite(tx, ty) {
     if (t.k === "portal") hit(x, y, tileHp(t, y) * 0.2, true);
     else { cur = null; breakTile(x, y, t); }
   }
-  for (let i = 0; i < 30; i++) fx.push({ x: tx * T + 8, y: ty * T + 8, vx: (Math.random() - .5) * 160, vy: (Math.random() - .7) * 160, c: ["#ffd23f", "#ff7b00", "#fff", "#555"][i % 4], l: .6 + Math.random() * .4 });
+  for (let i = 0; i < 30; i++) fx.push({ x: tx * T + 8, y: ty * T + 8, vx: (Math.random() - .5) * 160, vy: (Math.random() - .7) * 160, c: ["#ffd23f", "#ff7b00", "#ffffff", "#555555"][i % 4], l: .6 + Math.random() * .4 });
+}
+function buy(id) {
+  const u = UPGRADES.find(u => u.id === id), l = S.up[id];
+  if (u.max && l >= u.max) return;
+  const c = u.cost(l);
+  if (S.money < c) return;
+  S.money -= c; S.up[id]++; sfx("buy"); cur = null;
+  pulse = { id, t: 0.3 };
+}
+function buyDyn() { const c = dynCost(); if (S.money >= c) { S.money -= c; S.dyn++; sfx("buy"); } }
+function travel(i) {
+  if (i >= S.unlocked || i === S.world) return;
+  S.world = i; cur = null; armed = false; drawX = WS().x; drawY = WS().y; camY = drawY - PLAYER_ROW;
+  toast("WELCOME TO " + W().name, C.ink); sfx("buy");
+}
+function reforge() {
+  const g = pendingShards();
+  if (g < 1) return;
+  if (!confirmKey || confirmKey !== "reforge") { confirmKey = "reforge"; return; }
+  const keep = S; keep.shards += g; keep.stats.reforges++;
+  S = freshRun(keep); cur = null; drawX = 4; drawY = 0; camY = -0.5; confirmKey = null; armed = false;
+  sfx("portal"); toast(`REFORGED! ${fmt(S.shards)} ANCIENT SHARDS`, C.purple); save();
 }
 
-// ---------------------------------------------------------------- effects
+// ================================================================ effects + sound
 function tileColor(t, y) {
-  if (!t) return "#fff";
+  if (!t) return "#ffffff";
   if (t.k === "ore") return W().ores[t.i][1];
   if (t.k === "chest") return "#b07a3a";
-  if (t.k === "portal") return "#ff7bff";
+  if (t.k === "portal") return C.pink;
   return layerColor(y);
 }
 function debris(x, y, c, n) {
@@ -361,40 +280,190 @@ function sfx(type) {
   if (!S.sound) return;
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-    const notes = { hit: [[180 + Math.random() * 60, .03]], break: [[320, .04], [200, .05]], ore: [[660, .05], [880, .07]],
+    const notes = { hit: [[180 + Math.random() * 60, .03]], break: [[320, .04], [200, .05]], ore: [[660, .05], [880, .07]], click: [[900, .02]],
       rare: [[660, .06], [880, .06], [1320, .1]], portal: [[440, .1], [554, .1], [659, .1], [880, .25]], boom: [[90, .25]], buy: [[520, .04], [780, .06]] }[type];
     let t = actx.currentTime;
     for (const [f, d] of notes) {
       const o = actx.createOscillator(), g = actx.createGain();
       o.type = type === "boom" ? "sawtooth" : "square"; o.frequency.value = f;
-      g.gain.setValueAtTime(type === "hit" ? .03 : .05, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      g.gain.setValueAtTime(type === "hit" || type === "click" ? .03 : .05, t); g.gain.exponentialRampToValueAtTime(.0001, t + d);
       o.connect(g).connect(actx.destination); o.start(t); o.stop(t + d); t += d * .8;
     }
   } catch (e) {}
 }
 
-// ---------------------------------------------------------------- rendering
-const cv = document.getElementById("c"), cx = cv.getContext("2d");
-cx.imageSmoothingEnabled = false;
-let camY = 0, drawX = 4, drawY = 0, swingAnim = 0, hover = null, armed = false;
+// ================================================================ pixel font + icons
+const FONT = {
+  A: "010/101/111/101/101", B: "110/101/110/101/110", C: "011/100/100/100/011", D: "110/101/101/101/110",
+  E: "111/100/110/100/111", F: "111/100/110/100/100", G: "011/100/101/101/011", H: "101/101/111/101/101",
+  I: "111/010/010/010/111", J: "001/001/001/101/010", K: "101/101/110/101/101", L: "100/100/100/100/111",
+  M: "10001/11011/10101/10001/10001", N: "1001/1101/1011/1001/1001", O: "010/101/101/101/010", P: "110/101/110/100/100",
+  Q: "010/101/101/110/011", R: "110/101/110/101/101", S: "011/100/010/001/110", T: "111/010/010/010/010",
+  U: "101/101/101/101/111", V: "101/101/101/101/010", W: "10001/10001/10101/11011/10001", X: "101/101/010/101/101",
+  Y: "101/101/010/010/010", Z: "111/001/010/100/111",
+  0: "111/101/101/101/111", 1: "010/110/010/010/111", 2: "110/001/010/100/111", 3: "110/001/010/001/110",
+  4: "101/101/111/001/001", 5: "111/100/110/001/110", 6: "011/100/111/101/111", 7: "111/001/010/010/010",
+  8: "111/101/111/101/111", 9: "111/101/111/001/110",
+  ".": "0/0/0/0/1", ",": "00/00/00/01/10", ":": "0/1/0/1/0", "!": "1/1/1/0/1", "?": "110/001/010/000/010",
+  "-": "000/000/111/000/000", "+": "000/010/111/010/000", "/": "001/001/010/100/100", "$": "011/110/010/011/110",
+  "%": "101/001/010/100/101", "(": "01/10/10/10/01", ")": "10/01/01/01/10", ">": "100/010/001/010/100", "<": "001/010/100/010/001",
+  "'": "1/1/0/0/0", "=": "000/111/000/111/000", "#": "101/111/101/111/101", "*": "000/101/010/101/000", " ": "00/00/00/00/00",
+  "&": "010/101/010/101/011", "_": "000/000/000/000/111",
+};
+const glyphRows = {};
+for (const k in FONT) glyphRows[k] = FONT[k].split("/");
+const gcache = new Map();
+function glyph(ch, col) {
+  const key = ch + col;
+  let g = gcache.get(key);
+  if (g) return g;
+  const rows = glyphRows[ch] || glyphRows["?"];
+  g = document.createElement("canvas"); g.width = rows[0].length; g.height = 5;
+  const gx = g.getContext("2d"); gx.fillStyle = col;
+  rows.forEach((r, y) => { for (let x = 0; x < r.length; x++) if (r[x] === "1") gx.fillRect(x, y, 1, 1); });
+  gcache.set(key, g);
+  return g;
+}
+function tw(s, sc = 1) {
+  s = String(s).toUpperCase(); let w = 0;
+  for (const ch of s) w += ((glyphRows[ch] || glyphRows["?"])[0].length + 1);
+  return Math.max(0, w - 1) * sc;
+}
+function txt(s, x, y, col, sc = 1, align = "left") {
+  s = String(s).toUpperCase();
+  if (align === "right") x -= tw(s, sc); else if (align === "center") x -= tw(s, sc) / 2;
+  x = Math.round(x); y = Math.round(y);
+  for (const ch of s) { const g = glyph(ch, col); cx.drawImage(g, x, y, g.width * sc, 5 * sc); x += (g.width + 1) * sc; }
+}
+function txtS(s, x, y, col, sc = 1, align) { txt(s, x + sc, y + sc, "#000000", sc, align); txt(s, x, y, col, sc, align); }
+function wrap(s, maxW, sc = 1) {
+  const out = []; let line = "";
+  for (const word of String(s).split(" ")) {
+    const t = line ? line + " " + word : word;
+    if (tw(t, sc) > maxW && line) { out.push(line); line = word; } else line = t;
+  }
+  if (line) out.push(line);
+  return out;
+}
+const IPAL = { g: "#cfd6de", G: "#7f8796", b: "#8b5a2b", B: "#3f7fe0", e: "#5fbf4a", r: "#d94a4a", w: "#f2efe6",
+  p: "#a77bf3", P: "#6b45c9", y: "#f7c548", o: "#ff8c2a", k: "#6b6880", c: "#5cf0ff", s: "#f2c8a0" };
+const ICONS = {
+  pick:  [".ggggg.", "g..b..g", "...b...", "...b...", "...b...", "...b...", "...b..."],
+  globe: ["..BBB..", ".BeBBB.", "BeeBBeB", "BBeeBeB", "BBBeBBB", ".BBBeB.", "..BBB.."],
+  book:  [".rrrrr.", "rwrwwwr", "rwrwkwr", "rwrwwwr", "rwrwkwr", "rwrwwwr", ".rrrrr."],
+  shard: ["...p...", "..ppp..", ".ppwpp.", "pppwPpp", ".pPPPp.", "..pPp..", "...p..."],
+  gear:  ["..k.k..", ".kkkkk.", "kkk.kkk", ".k...k.", "kkk.kkk", ".kkkkk.", "..k.k.."],
+  dyn:   [".....yo", "....y..", "...rr..", "..rwr..", ".rrr...", "rrr....", "rr....."],
+  glove: [".s.s.s.", ".sssss.", ".sssss.", "ssssss.", ".ssss..", ".BBBB..", ".BBBB.."],
+  lamp:  ["..kkk..", ".k...k.", ".kyyyk.", ".kyoyk.", ".kyyyk.", ".kkkkk.", "..k.k.."],
+  gem:   [".ccccc.", "cwcccwc", "ccccccc", ".ccccc.", "..ccc..", "...c...", "......."],
+  drill: ["kkkk...", "kGGGgg.", "kGGGggg", "kGGGgg.", "kkkk...", ".k.k...", "......."],
+  bot:   ["...r...", ".kkkkk.", ".kcGck.", ".kkkkk.", "kGGGGGk", ".G...G.", ".k...k."],
+  coin:  ["..yyy..", ".yoyyy.", "yoyyyoy", "yyyyyoy", "yoyyyoy", ".yyyoy.", "..yyy.."],
+  sound: ["...k...", "..kk.y.", "kkkk..y", "kkkk..y", "kkkk..y", "..kk.y.", "...k..."],
+  lock:  ["..kkk..", ".k...k.", ".k...k.", "yyyyyyy", "yyyoyyy", "yyyoyyy", "yyyyyyy"],
+};
+const icache = new Map();
+function icon(name, x, y, sc = 1) {
+  let c = icache.get(name);
+  if (!c) {
+    const rows = ICONS[name];
+    c = document.createElement("canvas"); c.width = 7; c.height = 7;
+    const g = c.getContext("2d");
+    rows.forEach((r, yy) => { for (let xx = 0; xx < 7; xx++) if (r[xx] !== ".") { g.fillStyle = IPAL[r[xx]]; g.fillRect(xx, yy, 1, 1); } });
+    icache.set(name, c);
+  }
+  cx.drawImage(c, Math.round(x), Math.round(y), 7 * sc, 7 * sc);
+}
 
+// ================================================================ canvas + layout
+const cv = document.getElementById("c"), cx = cv.getContext("2d");
+let LW, LH, SC = 1, L = {}, bgCache = null;
+function layout() {
+  const portrait = innerHeight > innerWidth * 1.15;
+  if (portrait) { LW = 180; LH = 388; L = { sx: 18, sy: 14, px: 18, py: 206 }; }
+  else { LW = 320; LH = 200; L = { sx: 12, sy: 14, px: 170, py: 14 }; }
+  cv.width = LW; cv.height = LH;
+  const fit = Math.min(innerWidth / LW, innerHeight / LH);
+  SC = fit >= 1 ? Math.floor(fit) : fit;
+  cv.style.width = LW * SC + "px"; cv.style.height = LH * SC + "px";
+  cx.imageSmoothingEnabled = false;
+  bgCache = null;
+}
+addEventListener("resize", layout);
+
+function rrect(x, y, w, h, r, col) {
+  cx.fillStyle = col;
+  for (let i = 0; i < h; i++) {
+    let d = 0;
+    if (i < r) d = r - Math.round(Math.sqrt(r * r - (r - i - .5) ** 2));
+    else if (i >= h - r) d = r - Math.round(Math.sqrt(r * r - (i - (h - r) + .5) ** 2));
+    cx.fillRect(x + d, y + i, w - 2 * d, 1);
+  }
+}
+// bevelled pixel box
+function bevel(x, y, w, h, fill, hi = C.hi, lo = C.lo) {
+  cx.fillStyle = lo; cx.fillRect(x, y, w, h);
+  cx.fillStyle = fill; cx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  cx.fillStyle = hi; cx.fillRect(x + 1, y + 1, w - 2, 1); cx.fillRect(x + 1, y + 1, 1, h - 2);
+}
+function bar(x, y, w, h, f, c1, c2) {
+  cx.fillStyle = C.lo; cx.fillRect(x, y, w, h);
+  const fw = Math.round((w - 2) * Math.max(0, Math.min(1, f)));
+  cx.fillStyle = c1; cx.fillRect(x + 1, y + 1, fw, h - 2);
+  cx.fillStyle = c2; cx.fillRect(x + 1, y + 1, fw, 1);
+  // segment notches
+  cx.fillStyle = C.lo;
+  for (let i = 1; i < 10; i++) cx.fillRect(x + Math.round(w * i / 10), y + 1, 1, h - 2);
+}
+function drawBackground() {
+  if (!bgCache) {
+    bgCache = document.createElement("canvas"); bgCache.width = LW; bgCache.height = LH;
+    const g = bgCache.getContext("2d");
+    g.fillStyle = C.bg; g.fillRect(0, 0, LW, LH);
+    g.fillStyle = C.bg2;
+    for (let y = 0; y < LH; y += 4) for (let x = (y / 4 % 2) * 2; x < LW; x += 4) if (hash(x, y, 5) < .55) g.fillRect(x, y, 1, 1);
+  }
+  cx.drawImage(bgCache, 0, 0);
+}
+function drawWatch() {
+  const x = L.sx - 8, y = L.sy - 7, w = VW + 16, h = VH + 18;
+  // straps
+  cx.fillStyle = "#0e0d12"; cx.fillRect(x + 22, 0, w - 44, y + 4); cx.fillRect(x + 22, y + h - 4, w - 44, 14);
+  cx.fillStyle = "#1c1a22";
+  for (let i = 4; i < y; i += 5) cx.fillRect(x + 24, i, w - 48, 1);
+  // side buttons
+  cx.fillStyle = "#1a1820";
+  cx.fillRect(x - 3, y + 40, 4, 22);
+  for (const by of [30, 80, 130]) cx.fillRect(x + w - 1, y + by, 4, 22);
+  cx.fillStyle = "#5b6070";
+  cx.fillRect(x - 2, y + 41, 2, 20);
+  for (const by of [30, 80, 130]) cx.fillRect(x + w + 1, y + by + 1, 2, 20);
+  // body
+  rrect(x, y, w, h, 9, "#0f0e14");
+  rrect(x + 1, y + 1, w - 2, h - 2, 8, "#454a58");
+  rrect(x + 2, y + 3, w - 4, h - 5, 7, "#363a46");
+  cx.fillStyle = "#000"; cx.fillRect(L.sx - 2, L.sy - 2, VW + 4, VH + 4);
+  txt("PEBBLE", L.sx + VW / 2, L.sy + VH + 4, "#7d8291", 1, "center");
+}
+
+// ================================================================ mine rendering
+let camY = 0, drawX = 4, drawY = 0, hover = null;
 function mix(a, b, t) {
   const pa = parseInt(a.slice(1, 7), 16), pb = parseInt(b.slice(1, 7), 16);
   const r = (pa >> 16) * (1 - t) + (pb >> 16) * t, g = ((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t, bl = (pa & 255) * (1 - t) + (pb & 255) * t;
   return "#" + ((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1);
 }
 function layerColor(y) {
-  const L = W().layers, f = Math.min(y / W().goal, 1.5) * (L.length - 1) / 1.0;
-  const i = Math.min(Math.floor(f), L.length - 2);
-  return mix(L[i], L[i + 1], Math.min(f - i, 1));
+  const Ls = W().layers, f = Math.min(y / W().goal, 1.5) * (Ls.length - 1);
+  const i = Math.min(Math.floor(f), Ls.length - 2);
+  return mix(Ls[i], Ls[i + 1], Math.min(f - i, 1));
 }
 function drawTile(x, y, sx, sy, now) {
   const t = tileAt(x, y), w = W();
-  const base = layerColor(y);
-  cx.fillStyle = base; cx.fillRect(sx, sy, T, T);
-  // speckles
+  cx.fillStyle = layerColor(y); cx.fillRect(sx, sy, T, T);
   cx.fillStyle = w.speck;
-  for (let i = 0; i < 5; i++) { const h = hash(x, y, 31 + i); cx.fillRect(sx + (h * 14 | 0), sy + (hash(y, x, 57 + i) * 14 | 0), 2, 1); }
+  for (let i = 0; i < 5; i++) cx.fillRect(sx + (hash(x, y, 31 + i) * 14 | 0), sy + (hash(y, x, 57 + i) * 14 | 0), 2, 1);
   cx.fillStyle = "#ffffff14"; cx.fillRect(sx, sy, T, 1);
   cx.fillStyle = "#0000002a"; cx.fillRect(sx, sy + T - 1, T, 1);
   if (y === 1) { cx.fillStyle = w.top; cx.fillRect(sx, sy, T, 3); cx.fillRect(sx + (hash(x, 0, 3) * 12 | 0), sy + 3, 2, 2); }
@@ -413,44 +482,44 @@ function drawTile(x, y, sx, sy, now) {
   } else if (t.k === "portal") {
     const p = (now / 200) % 16;
     cx.fillStyle = "#2a0838"; cx.fillRect(sx, sy, T, T);
-    for (let i = 0; i < 4; i++) { cx.fillStyle = ["#ff7bff", "#9b5cff", "#5cf0ff", "#fff"][i]; cx.fillRect(sx + ((p + i * 4 + x * 3) % 16), sy + ((i * 5 + y) % 14) + 1, 2, 2); }
-    cx.strokeStyle = "#ff7bff"; cx.strokeRect(sx + .5, sy + .5, T - 1, T - 1);
+    for (let i = 0; i < 4; i++) { cx.fillStyle = [C.pink, "#9b5cff", "#5cf0ff", "#ffffff"][i]; cx.fillRect(sx + ((p + i * 4 + x * 3) % 16), sy + ((i * 5 + y) % 14) + 1, 2, 2); }
+    cx.strokeStyle = C.pink; cx.strokeRect(sx + .5, sy + .5, T - 1, T - 1);
   }
   if (cur && cur.x === x && cur.y === y && cur.w === S.world) {
     const f = cur.dmg / cur.max;
     cx.fillStyle = "#000000aa";
-    if (f > .0) { cx.fillRect(sx + 7, sy + 3, 1, 5); cx.fillRect(sx + 8, sy + 7, 3, 1); }
+    cx.fillRect(sx + 7, sy + 3, 1, 5); cx.fillRect(sx + 8, sy + 7, 3, 1);
     if (f > .33) { cx.fillRect(sx + 3, sy + 9, 5, 1); cx.fillRect(sx + 10, sy + 8, 1, 5); }
     if (f > .66) { cx.fillRect(sx + 2, sy + 3, 1, 4); cx.fillRect(sx + 11, sy + 2, 3, 1); cx.fillRect(sx + 5, sy + 12, 4, 1); }
   }
 }
 function drawMiner(sx, sy, now) {
   const blink = (now % 3000) < 120;
-  cx.fillStyle = "#3a6ee8"; cx.fillRect(sx + 4, sy + 8, 8, 6);   // body
-  cx.fillStyle = "#24408a"; cx.fillRect(sx + 4, sy + 14, 3, 2); cx.fillRect(sx + 9, sy + 14, 3, 2); // boots
-  cx.fillStyle = "#f2c8a0"; cx.fillRect(sx + 5, sy + 4, 6, 4);   // face
+  cx.fillStyle = "#3a6ee8"; cx.fillRect(sx + 4, sy + 8, 8, 6);
+  cx.fillStyle = "#24408a"; cx.fillRect(sx + 4, sy + 14, 3, 2); cx.fillRect(sx + 9, sy + 14, 3, 2);
+  cx.fillStyle = "#f2c8a0"; cx.fillRect(sx + 5, sy + 4, 6, 4);
   cx.fillStyle = blink ? "#f2c8a0" : "#222"; cx.fillRect(sx + 6, sy + 5, 1, 1); cx.fillRect(sx + 9, sy + 5, 1, 1);
-  cx.fillStyle = "#f2c14e"; cx.fillRect(sx + 4, sy + 1, 8, 3);   // helmet
-  cx.fillStyle = "#fff8b0"; cx.fillRect(sx + 7, sy + 1, 2, 2);   // lamp
-  // pickaxe
+  cx.fillStyle = "#f2c14e"; cx.fillRect(sx + 4, sy + 1, 8, 3);
+  cx.fillStyle = "#fff8b0"; cx.fillRect(sx + 7, sy + 1, 2, 2);
   const a = swingAnim > 0 ? -0.9 + (1 - swingAnim) * 1.8 : 0.5;
   cx.save(); cx.translate(sx + 12, sy + 10); cx.rotate(a);
   cx.fillStyle = "#8b5a2b"; cx.fillRect(0, -1, 7, 2);
   cx.fillStyle = "#cfd6de"; cx.fillRect(5, -4, 2, 8);
   cx.restore();
 }
-function render(now) {
+function drawMine(now) {
   const w = W(), ws = WS();
-  const sh = shake > 0 ? (Math.random() - .5) * shake : 0;
-  cx.setTransform(1, 0, 0, 1, sh, 0);
-  // sky
+  const sh = shake > 0 ? Math.round((Math.random() - .5) * shake) : 0;
+  cx.save();
+  cx.beginPath(); cx.rect(L.sx, L.sy, VW, VH); cx.clip();
+  cx.translate(L.sx + sh, L.sy);
   const g = cx.createLinearGradient(0, 0, 0, VH);
   g.addColorStop(0, w.sky[0]); g.addColorStop(1, w.sky[1]);
   cx.fillStyle = g; cx.fillRect(-10, 0, VW + 20, VH);
   const oy = Math.round(camY * T);
-  if (camY < 2) { // surface decoration
+  if (camY < 2) {
     cx.fillStyle = "#ffffff55";
-    cx.fillRect(((now / 80) % 180) - 30, 10 - oy, 18, 4); cx.fillRect(((now / 120 + 90) % 180) - 30, 20 - oy, 12, 3);
+    cx.fillRect(Math.round((now / 80) % 180) - 30, 14 - oy, 18, 4); cx.fillRect(Math.round((now / 120 + 90) % 180) - 30, 24 - oy, 12, 3);
   }
   const top = Math.floor(camY);
   for (let y = top; y <= top + 11; y++) for (let x = 0; x < COLS; x++) {
@@ -458,16 +527,15 @@ function render(now) {
     if (solid(x, y)) drawTile(x, y, sx, sy, now);
     else if (y > 0) { cx.fillStyle = mix(layerColor(y), "#000000", .65); cx.fillRect(sx, sy, T, T); }
   }
-  // hover outline
-  if (hover && !armed) {
-    const nt = nextTarget(hover[0], hover[1]);
-    if (nt) { cx.strokeStyle = solid(nt[0], nt[1]) ? "#ffffffcc" : "#ffffff55"; cx.strokeRect(nt[0] * T + .5, nt[1] * T - oy + .5, T - 1, T - 1); }
+  if (hover && !armed && !modal) {
+    const nt = stepToward(hover[0], hover[1]);
+    if (nt) corners(nt[0] * T, nt[1] * T - oy, nt[2] ? "#ffffff" : "#ffffff66", now);
   }
   if (hover && armed) {
-    cx.strokeStyle = "#ff5a3c"; cx.strokeRect((hover[0] - 1) * T + .5, (hover[1] - 1) * T - oy + .5, T * 3 - 1, T * 3 - 1);
+    cx.strokeStyle = (now / 150 | 0) % 2 ? "#ff5a3c" : "#ffd23f";
+    cx.strokeRect((hover[0] - 1) * T + .5, (hover[1] - 1) * T - oy + .5, T * 3 - 1, T * 3 - 1);
   }
   drawMiner(Math.round(drawX * T), Math.round(drawY * T) - oy, now);
-  // darkness deepens with depth, lantern around player
   const dark = Math.min(0.75, ws.y / w.goal * 0.6 + (S.world >= 3 ? 0.15 : 0));
   if (dark > 0.02) {
     const px = drawX * T + 8, py = drawY * T - oy + 8, r = 46 + S.up.luck * 1.2;
@@ -476,60 +544,237 @@ function render(now) {
     cx.fillStyle = rg; cx.fillRect(-10, 0, VW + 20, VH);
   }
   for (const p of fx) { cx.fillStyle = p.c; cx.fillRect(p.x | 0, (p.y - oy) | 0, 2, 2); }
-  cx.font = "bold 8px monospace"; cx.textAlign = "center";
   for (const p of pops) {
     cx.globalAlpha = Math.min(1, p.l * 2);
-    cx.fillStyle = "#000"; cx.fillText(p.txt, p.x + 1, p.y - oy + 1);
-    cx.fillStyle = p.c; cx.fillText(p.txt, p.x, p.y - oy);
+    txtS(p.txt, p.x, p.y - oy, p.c, 1, "center");
   }
   cx.globalAlpha = 1;
-  // depth label
-  cx.textAlign = "left"; cx.fillStyle = "#000a"; cx.fillRect(0, 0, cx.measureText(ws.y + "m").width + 6, 11);
-  cx.fillStyle = "#fff"; cx.fillText(ws.y + "m", 3, 8);
+  // depth tag (Pebble-style status bar)
+  const tag = ws.y + "M";
+  cx.fillStyle = "#000000aa"; cx.fillRect(0, 0, tw(tag) + 6, 9);
+  txt(tag, 3, 2, "#ffffff");
+  if (armed) { cx.fillStyle = "#000000aa"; cx.fillRect(0, VH - 9, VW, 9); txt("CLICK TO BLAST (3X3)", VW / 2, VH - 7, "#ff8c2a", 1, "center"); }
+  cx.restore();
+}
+function corners(x, y, col, now) {
+  const o = (now / 250 | 0) % 2;
+  cx.fillStyle = col;
+  for (const [cx0, cy0, dx, dy] of [[x - o, y - o, 1, 1], [x + T - 1 + o, y - o, -1, 1], [x - o, y + T - 1 + o, 1, -1], [x + T - 1 + o, y + T - 1 + o, -1, -1]]) {
+    cx.fillRect(Math.min(cx0, cx0 + dx * 3), cy0, 4, 1); cx.fillRect(cx0, Math.min(cy0, cy0 + dy * 3), 1, 4);
+  }
 }
 
-// ---------------------------------------------------------------- input (mouse / touch)
-let holding = false, pointer = null, nextSwing = 0;
-function tileFromEvent(e) {
+// ================================================================ panel UI (immediate mode)
+let regions = [], mouse = null, tab = "shop", confirmKey = null, pulse = null, tip = null, modal = null, toastMsg = null;
+const TABS = [["shop", "pick", "SHOP"], ["worlds", "globe", "WORLDS"], ["codex", "book", "CODEX"], ["reforge", "shard", "REFORGE"], ["more", "gear", "MORE"]];
+const inR = (x, y, w, h) => mouse && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
+function region(x, y, w, h, fn, tipText) { regions.push({ x, y, w, h, fn }); if (tipText && inR(x, y, w, h)) tip = tipText; }
+function button(x, y, w, h, fn, opt = {}) {
+  const hov = inR(x, y, w, h) && !opt.disabled, down = hov && mouseDown;
+  const fill = opt.on ? (opt.onCol || "#5a3f2a") : opt.disabled ? "#24212f" : hov ? "#433e58" : C.panel2;
+  if (down) { cx.fillStyle = C.lo; cx.fillRect(x, y, w, h); cx.fillStyle = fill; cx.fillRect(x + 1, y + 2, w - 2, h - 3); }
+  else bevel(x, y, w, h, fill, opt.on ? "#a8743f" : hov ? "#6a6488" : C.hi);
+  if (hov && !opt.on) { cx.fillStyle = C.gold; cx.fillRect(x, y + h - 1, w, 1); }
+  if (!opt.disabled || opt.clickDisabled) region(x, y, w, h, fn, opt.tip);
+  else if (opt.tip && inR(x, y, w, h)) tip = opt.tip;
+  return down ? 1 : 0;
+}
+function drawPanel(now) {
+  const X = L.px, Y = L.py, PW = 144, ws = WS(), w = W();
+  // header
+  bevel(X, Y, PW, 34, C.panel);
+  icon("coin", X + 4, Y + 4, 2);
+  txtS("$" + fmt(S.money), X + 21, Y + 5, C.gold, 2);
+  const inc = robotIncome(S.up.robots);
+  if (inc > 0) txt("+" + fmt(inc) + "/S", X + PW - 4, Y + 5, C.green, 1, "right");
+  txt(w.name, X + 5, Y + 19, C.ink);
+  txt(ws.y + "M", X + PW - 4, Y + 19, C.dim, 1, "right");
+  bar(X + 4, Y + 27, PW - 8, 4, ws.max / w.goal, ws.max >= w.goal ? C.pink : C.purple, "#ffffff66");
+  region(X + 4, Y + 25, PW - 8, 8, null, ws.max >= w.goal ? "PORTAL REACHED! DEEPER = RICHER" : `PORTAL AT ${w.goal}M - BEST ${ws.max}M`);
+  // tabs
+  const tY = Y + 37, tWd = 28;
+  TABS.forEach(([id, ic, label], i) => {
+    const x = X + i * (tWd + 1), on = tab === id;
+    button(x, tY, tWd, 14, () => { tab = id; confirmKey = null; sfx("click"); }, { on, onCol: C.panel, tip: label });
+    icon(ic, x + 10, tY + 3 + (on ? 0 : 1));
+    if (on) { cx.fillStyle = C.gold; cx.fillRect(x + 2, tY + 12, tWd - 4, 1); }
+  });
+  // content
+  const cY = Y + 54, cH = 100;
+  bevel(X, cY - 1, PW, cH + 2, C.panel);
+  ({ shop: paneShop, worlds: paneWorlds, codex: paneCodex, reforge: paneReforge, more: paneMore })[tab](X + 2, cY + 1, PW - 4, cH - 2, now);
+  // footer: dynamite
+  const fY = Y + 156;
+  button(X, fY, 50, 16, () => { if (S.dyn > 0) { armed = !armed; sfx("click"); } }, { on: armed, onCol: "#7a2a1a", disabled: S.dyn <= 0, tip: armed ? "CLICK THE MINE TO BLAST" : "ARM DYNAMITE" });
+  icon("dyn", X + 5, fY + 4);
+  txt("X" + S.dyn, X + 16, fY + 6, S.dyn > 0 ? C.ink : C.dim);
+  const dc = dynCost(), can = S.money >= dc;
+  button(X + 52, fY, PW - 52, 16, buyDyn, { disabled: !can, tip: "BUY ONE STICK OF DYNAMITE" });
+  txt("BUY", X + 57, fY + 6, can ? C.ink : C.dim);
+  txt("$" + fmt(dc), X + PW - 5, fY + 6, can ? C.gold : C.red, 1, "right");
+}
+function paneShop(x, y, w) {
+  UPGRADES.forEach((u, i) => {
+    const l = S.up[u.id], max = u.max && l >= u.max, c = u.cost(l), can = !max && S.money >= c;
+    const iy = y + i * 16, d = button(x, iy, w, 15, () => buy(u.id), { disabled: !can });
+    if (pulse && pulse.id === u.id) { cx.fillStyle = `rgba(247,197,72,${pulse.t})`; cx.fillRect(x + 1, iy + 1, w - 2, 13); }
+    icon(u.icon, x + 3, iy + 4 + d);
+    txt(u.name, x + 13, iy + 2 + d, can || max ? C.ink : C.dim);
+    txt("LV" + l, x + 14 + tw(u.name) + 3, iy + 2 + d, C.dim);
+    txt(max ? "MAX" : "$" + fmt(c), x + w - 3, iy + 2 + d, max ? C.green : can ? C.gold : C.red, 1, "right");
+    txt(max ? "FULLY UPGRADED" : u.desc(l), x + 13, iy + 9 + d, C.dim);
+  });
+}
+function paneWorlds(x, y, w) {
+  WORLDS.forEach((wd, i) => {
+    const lock = i >= S.unlocked, here = i === S.world, iy = y + i * 14 - 1, ws = S.worlds[i];
+    const d = button(x, iy, w, 14, () => travel(i), { disabled: lock || here, on: here, onCol: "#2f3a2f",
+      tip: lock ? "BREAK THE PREVIOUS PORTAL" : here ? "YOU ARE HERE" : "TRAVEL HERE" });
+    icon(lock ? "lock" : "globe", x + 3, iy + 3 + d);
+    txt(lock ? "???" : wd.name, x + 13, iy + 2 + d, lock ? C.dim : C.ink);
+    txt(here ? "HERE" : lock ? "" : "GO", x + w - 3, iy + 2 + d, here ? C.green : C.gold, 1, "right");
+    txt(lock ? "LOCKED" : `BEST ${ws.max}/${wd.goal}M  VALUE X${fmt(wd.vm)}`, x + 13, iy + 8 + d, C.dim);
+  });
+}
+function paneCodex(x, y, w) {
+  txt("ORE CODEX", x + 3, y + 2, C.ink);
+  txt("BONUS X" + codexBonus().toFixed(2), x + w - 3, y + 2, C.gold, 1, "right");
+  WORLDS.forEach((wd, wi) => {
+    const iy = y + 10 + wi * 11, lock = wi >= S.unlocked;
+    txt(lock ? "???" : wd.name.split(" ").pop(), x + 3, iy + 2, lock ? C.dim : C.ink);
+    wd.ores.forEach((o, oi) => {
+      const sx = x + w - 3 - (7 - oi) * 10, found = S.codex[wi + ":" + oi];
+      bevel(sx, iy, 9, 9, found ? o[1] : "#1a1824", found ? "#ffffff88" : "#2f2c3c", "#0b0a10");
+      if (!found) txt("?", sx + 3, iy + 2, "#4a4660");
+      region(sx, iy, 9, 9, null, lock ? "???" : found ? o[0] + "  X" + o[2] : `??? (FOUND BELOW ${Math.ceil(o[4] * wd.goal)}M)`);
+    });
+  });
+  txt("+2% PER ORE, +10% PER WORLD", x + w / 2, y + 90, C.dim, 1, "center");
+}
+function paneReforge(x, y, w) {
+  const g = pendingShards();
+  icon("shard", x + 3, y + 3, 2);
+  txt("ANCIENT SHARDS", x + 21, y + 3, C.ink);
+  txtS(fmt(S.shards), x + 21, y + 10, C.purple, 1);
+  txt("X" + bonusMult().toFixed(1) + " ORE VALUE", x + w - 3, y + 10, C.gold, 1, "right");
+  const lines = wrap("Melt your gear into shards. Each shard: +10% ore value, forever. Resets money, upgrades and mines. Keeps shards, worlds and codex.", w - 6);
+  lines.forEach((l, i) => txt(l, x + 3, y + 22 + i * 7, C.dim));
+  txt("THIS RUN: $" + fmt(S.runEarned), x + 3, y + 62, C.ink);
+  const conf = confirmKey === "reforge";
+  const d = button(x + 2, y + 74, w - 4, 20, reforge, { disabled: g < 1, on: conf, onCol: "#7a2a3a" });
+  txt(g < 1 ? `EARN $${fmt(1e5)} TO REFORGE` : conf ? "CLICK AGAIN TO CONFIRM" : `REFORGE: +${fmt(g)} SHARDS`, x + w / 2, y + 79 + d, g < 1 ? C.dim : conf ? "#ffffff" : C.gold, 1, "center");
+  if (g >= 1) txt(`X${bonusMult().toFixed(1)} > X${(1 + (S.shards + g) * .1).toFixed(1)}`, x + w / 2, y + 86 + d, C.dim, 1, "center");
+}
+function paneMore(x, y, w) {
+  const st = S.stats;
+  [["PLAY TIME", (st.time / 3600).toFixed(1) + "H"], ["BLOCKS MINED", fmt(st.blocks)], ["ORES MINED", fmt(st.ores)],
+   ["CHESTS FOUND", fmt(st.chests)], ["REFORGES", st.reforges], ["TOTAL EARNED", "$" + fmt(S.totalEarned)]].forEach(([k, v], i) => {
+    txt(k, x + 3, y + 3 + i * 8, C.dim); txt(v, x + w - 3, y + 3 + i * 8, C.ink, 1, "right");
+  });
+  let d = button(x + 2, y + 54, w - 4, 15, () => { S.sound = !S.sound; sfx("click"); });
+  icon("sound", x + 6, y + 58 + d);
+  txt("SOUND: " + (S.sound ? "ON" : "OFF"), x + 17, y + 59 + d, S.sound ? C.ink : C.dim);
+  const step = confirmKey === "reset2" ? 2 : confirmKey === "reset1" ? 1 : 0;
+  d = button(x + 2, y + 72, w - 4, 15, () => {
+    if (step === 2) { localStorage.removeItem(SAVE_KEY); S = freshRun(); cur = null; camY = drawY = 0; drawX = 4; confirmKey = null; toast("SAVE DELETED", C.red); }
+    else confirmKey = step ? "reset2" : "reset1";
+  }, { on: step > 0, onCol: "#7a2a2a" });
+  txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 77 + d, C.red, 1, "center");
+  txt("AUTOSAVES. ROBOTS EARN WHILE AWAY.", x + w / 2, y + 91, C.dim, 1, "center");
+}
+function drawToast(now) {
+  if (!toastMsg) return;
+  const a = Math.min(1, toastMsg.t * 2);
+  if (a <= 0) return;
+  cx.globalAlpha = a;
+  const wd = tw(toastMsg.text) + 14, x = Math.round(LW / 2 - wd / 2), y = 3;
+  bevel(x, y, wd, 13, "#1f1c2b", toastMsg.col, C.lo);
+  txt(toastMsg.text, LW / 2, y + 4, toastMsg.col, 1, "center");
+  cx.globalAlpha = 1;
+}
+function drawTip() {
+  if (!tip || !mouse || modal) return;
+  const wd = tw(tip) + 8;
+  let x = mouse.x + 6, y = mouse.y + 8;
+  if (x + wd > LW - 2) x = LW - 2 - wd;
+  if (y + 11 > LH - 2) y = mouse.y - 14;
+  bevel(x, y, wd, 11, "#0f0e15", "#4f4a66", "#000");
+  txt(tip, x + 4, y + 3, C.ink);
+}
+function drawModal() {
+  if (!modal) return;
+  cx.fillStyle = "#000000b0"; cx.fillRect(0, 0, LW, LH);
+  const wd = Math.min(LW - 16, 200), lines = [];
+  modal.body.forEach((p, i) => { if (i) lines.push(""); lines.push(...wrap(p, wd - 16)); });
+  const h = 34 + lines.length * 7 + 22, x = Math.round((LW - wd) / 2), y = Math.round((LH - h) / 2);
+  bevel(x - 1, y - 1, wd + 2, h + 2, "#000", "#000", "#000");
+  bevel(x, y, wd, h, C.panel);
+  txtS(modal.title, x + wd / 2, y + 8, C.gold, 2, "center");
+  lines.forEach((l, i) => txt(l, x + 8, y + 26 + i * 7, C.ink));
+  const d = button(x + wd / 2 - 25, y + h - 20, 50, 15, () => { modal = null; sfx("click"); });
+  txt("OK", x + wd / 2, y + h - 15 + d, C.gold, 1, "center");
+}
+function drawCursor() {
+  if (!mouse) return;
+  const x = Math.round(mouse.x), y = Math.round(mouse.y);
+  cx.fillStyle = "#000";
+  cx.fillRect(x - 1, y - 1, 3, 9); cx.fillRect(x - 1, y - 1, 9, 3);
+  cx.fillStyle = mouseDown ? C.gold : "#ffffff";
+  cx.fillRect(x, y, 1, 7); cx.fillRect(x, y, 7, 1);
+}
+function toast(text, col = C.ink) { toastMsg = { text: String(text).toUpperCase(), col, t: 2.6 }; }
+function showModal(title, body) { modal = { title, body }; holding = false; }
+
+// ================================================================ input
+let holding = false, mouseDown = false, nextSwing = 0;
+function toLogical(e) {
   const r = cv.getBoundingClientRect();
-  const mx = (e.clientX - r.left) / r.width * VW, my = (e.clientY - r.top) / r.height * VH;
-  return [Math.max(0, Math.min(COLS - 1, Math.floor(mx / T))), Math.floor((my + camY * T) / T), mx, my];
+  return { x: (e.clientX - r.left) / r.width * LW, y: (e.clientY - r.top) / r.height * LH };
+}
+function mineTile(m, clamp) {
+  let mx = m.x - L.sx, my = m.y - L.sy;
+  if (!clamp && (mx < 0 || my < 0 || mx >= VW || my >= VH)) return null;
+  mx = Math.max(0, Math.min(VW - 1, mx)); my = Math.max(0, Math.min(VH - 1, my));
+  return [Math.floor(mx / T), Math.floor((my + camY * T) / T)];
 }
 cv.addEventListener("pointerdown", e => {
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
-  pointer = e; hover = tileFromEvent(e);
-  if (armed) { dynamite(hover[0], hover[1]); return; }
+  mouse = toLogical(e); mouseDown = true;
+  for (let i = regions.length - 1; i >= 0; i--) {
+    const r = regions[i];
+    if (mouse.x >= r.x && mouse.x < r.x + r.w && mouse.y >= r.y && mouse.y < r.y + r.h) { if (r.fn) r.fn(); return; }
+  }
+  if (modal) return;
+  const t = mineTile(mouse);
+  if (!t) { if (confirmKey) confirmKey = null; return; }
+  if (armed) { dynamite(t[0], t[1]); return; }
   holding = true; nextSwing = 0;
 });
-cv.addEventListener("pointermove", e => { pointer = e; hover = tileFromEvent(e); });
-window.addEventListener("pointerup", () => { holding = false; });
-cv.addEventListener("pointerleave", () => { if (!holding) hover = null; });
+cv.addEventListener("pointermove", e => { mouse = toLogical(e); });
+addEventListener("pointerup", () => { holding = false; mouseDown = false; });
+cv.addEventListener("pointerleave", () => { if (!holding) mouse = null; });
 cv.addEventListener("contextmenu", e => e.preventDefault());
 
-// ---------------------------------------------------------------- loop
-let lastT = performance.now(), drillAcc = 0, uiAcc = 0, saveAcc = 0, fallAcc = 0;
+// ================================================================ loop
+let lastT = performance.now(), drillAcc = 0, saveAcc = 0, fallAcc = 0;
 function update(dt, now) {
   const ws = WS();
   S.stats.time += dt;
-  if (holding && pointer && now >= nextSwing) {
-    hover = tileFromEvent(pointer);
+  hover = mouse ? mineTile(mouse, holding) : null;
+  if (holding && hover && !modal && now >= nextSwing) {
     const r = act(hover[0], hover[1]);
     const iv = 1000 / swingRate(S.up.speed);
     nextSwing = now + (r === "move" ? Math.min(iv, 110) : iv);
   }
-  // gravity
   fallAcc += dt;
   if (!solid(ws.x, ws.y + 1) && fallAcc > 0.05) { ws.y++; fallAcc = 0; }
   if (ws.y > ws.max) ws.max = ws.y;
-  // auto drill
   const dr = drillRate(S.up.drill);
   if (dr > 0) {
     drillAcc += dt * dr;
     while (drillAcc >= 1) { drillAcc--; if (solid(ws.x, ws.y + 1)) hit(ws.x, ws.y + 1, pickDmg(S.up.pick), true); }
   }
-  // robots
   if (S.up.robots) earn(robotIncome(S.up.robots) * dt);
-  // tween / fx
   drawX += (ws.x - drawX) * Math.min(1, dt * 18);
   drawY += (ws.y - drawY) * Math.min(1, dt * 18);
   if (Math.abs(ws.y - drawY) > 6) drawY = ws.y;
@@ -537,153 +782,50 @@ function update(dt, now) {
   if (camY < -0.5) camY = -0.5;
   swingAnim = Math.max(0, swingAnim - dt * 6);
   shake = Math.max(0, shake - dt * 30);
+  if (pulse && (pulse.t -= dt) <= 0) pulse = null;
+  if (toastMsg && (toastMsg.t -= dt) <= 0) toastMsg = null;
   for (let i = fx.length - 1; i >= 0; i--) { const p = fx[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; p.l -= dt; if (p.l <= 0) fx.splice(i, 1); }
   for (let i = pops.length - 1; i >= 0; i--) { const p = pops[i]; p.y -= 14 * dt; p.l -= dt; if (p.l <= 0) pops.splice(i, 1); }
-  uiAcc += dt; if (uiAcc > .2) { uiAcc = 0; updateUI(); }
   saveAcc += dt; if (saveAcc > 10) { saveAcc = 0; save(); }
 }
 function frame(now) {
   const dt = Math.min(0.1, (now - lastT) / 1000); lastT = now;
-  update(dt, now); render(now);
+  update(dt, now);
+  regions = []; tip = null;
+  drawBackground();
+  drawWatch();
+  drawMine(now);
+  if (modal) { const keep = mouse; mouse = null; drawPanel(now); mouse = keep; regions = []; }
+  else drawPanel(now);
+  drawToast(now);
+  drawTip();
+  drawModal();
+  drawCursor();
   requestAnimationFrame(frame);
 }
 
-// ---------------------------------------------------------------- UI
-const $ = id => document.getElementById(id);
 function fmt(n) {
-  if (!isFinite(n)) return "∞";
+  if (!isFinite(n)) return "INF";
   if (n < 10) return (Math.floor(n * 10) / 10).toString();
   if (n < 1000) return Math.floor(n).toString();
-  const u = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+  const u = ["", "K", "M", "B", "T", "QA", "QI", "SX", "SP", "OC", "NO", "DC"];
   const e = Math.floor(Math.log10(n) / 3);
-  if (e < u.length) return (n / Math.pow(1000, e)).toFixed(n / Math.pow(1000, e) < 100 ? 2 : 1) + u[e];
-  return n.toExponential(2).replace("+", "");
+  if (e < u.length) { const m = n / Math.pow(1000, e); return m.toFixed(m < 100 ? 2 : 1) + u[e]; }
+  return n.toExponential(2).replace("+", "").toUpperCase();
 }
-let tab = "shop", reforgeConfirm = false, resetConfirm = 0;
-document.querySelectorAll(".tab").forEach(el => el.addEventListener("click", () => {
-  tab = el.dataset.tab; reforgeConfirm = false; resetConfirm = 0;
-  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("on", t === el));
-  renderPane();
-}));
-function pendingShards() { return Math.floor(Math.sqrt(S.runEarned / 1e5)); }
-
-function renderPane() {
-  const p = $("pane");
-  if (tab === "shop") {
-    p.innerHTML = UPGRADES.map(u => {
-      const l = S.up[u.id], max = u.max && l >= u.max, c = u.cost(l);
-      return `<div class="item ${max ? "max" : S.money < c ? "no" : ""}" data-up="${u.id}">
-        <div class="row"><span class="t">${u.name} <span class="lv">Lv ${l}${u.max ? "/" + u.max : ""}</span></span>
-        <span class="cost">${max ? "MAX" : "$" + fmt(c)}</span></div><div class="d">${max ? "Fully upgraded" : u.desc(l)}</div></div>`;
-    }).join("") + `<div class="sub" style="margin-top:6px">Tip: hold the mouse button to keep digging. Click anywhere and your miner digs toward it.</div>`;
-    p.querySelectorAll("[data-up]").forEach(el => el.addEventListener("click", () => buy(el.dataset.up)));
-  } else if (tab === "worlds") {
-    p.innerHTML = WORLDS.map((w, i) => {
-      const lock = i >= S.unlocked, ws = S.worlds[i];
-      return `<div class="item ${lock ? "no" : ""} ${i === S.world ? "max" : ""}" data-w="${i}">
-        <div class="row"><span class="t">${i + 1}. ${lock ? "???" : w.name}</span><span class="lv">${i === S.world ? "HERE" : lock ? "LOCKED" : "TRAVEL"}</span></div>
-        <div class="d">${lock ? "Break the portal at the bottom of the previous world" : `Portal at ${w.goal}m · deepest ${ws.max}m · ore value x${fmt(w.vm)}`}</div></div>`;
-    }).join("");
-    p.querySelectorAll("[data-w]").forEach(el => el.addEventListener("click", () => travel(+el.dataset.w)));
-  } else if (tab === "codex") {
-    const cb = codexBonus();
-    p.innerHTML = `<div class="sub">Each ore found: +2% value. Each completed world: +10%. Current bonus: <b style="color:var(--accent)">x${cb.toFixed(2)}</b></div>` +
-      WORLDS.map((w, wi) => wi >= S.unlocked ? `<h3>${wi + 1}. ???</h3>` :
-        `<h3>${wi + 1}. ${w.name}</h3><div class="ore-grid">${w.ores.map((o, oi) => S.codex[wi + ":" + oi]
-          ? `<div class="ore"><span class="sw" style="background:${o[1]}"></span>${o[0]}</div>`
-          : `<div class="ore" style="color:var(--dim)"><span class="sw" style="background:#111"></span>??? <span style="margin-left:auto">${Math.ceil(o[4] * w.goal)}m+</span></div>`).join("")}</div>`).join("");
-  } else if (tab === "reforge") {
-    const g = pendingShards();
-    p.innerHTML = `<h3>Reforge</h3>
-      <div class="d" style="color:var(--dim)">Melt down your gear to forge <b>Ancient Shards</b>. Each shard permanently gives <b>+10%</b> pickaxe damage and ore value.<br><br>
-      Reforging resets money, upgrades and mine progress. You keep: shards, unlocked worlds, codex.</div>
-      <div class="item max" style="margin-top:10px"><div class="row"><span>Ancient Shards</span><b style="color:var(--accent)">${fmt(S.shards)}</b></div>
-      <div class="row sub"><span>Current bonus</span><span>x${bonusMult().toFixed(1)}</span></div>
-      <div class="row sub"><span>Earned this run</span><span>$${fmt(S.runEarned)}</span></div></div>
-      <button class="big ${reforgeConfirm ? "red" : ""}" id="rf" ${g < 1 ? "disabled" : ""}>${g < 1 ? `Earn $${fmt(1e5)} this run to reforge` : reforgeConfirm ? `Click again to confirm (+${fmt(g)} shards)` : `Reforge for +${fmt(g)} shards (x${bonusMult().toFixed(1)} → x${(1 + (S.shards + g) * .1).toFixed(1)})`}</button>`;
-    $("rf").addEventListener("click", reforge);
-  } else {
-    const st = S.stats;
-    p.innerHTML = `<h3>Stats</h3><div class="item max">
-      <div class="row sub"><span>Play time</span><span>${(st.time / 3600).toFixed(1)}h</span></div>
-      <div class="row sub"><span>Blocks mined</span><span>${fmt(st.blocks)}</span></div>
-      <div class="row sub"><span>Ores mined</span><span>${fmt(st.ores)}</span></div>
-      <div class="row sub"><span>Chests found</span><span>${fmt(st.chests)}</span></div>
-      <div class="row sub"><span>Reforges</span><span>${st.reforges}</span></div>
-      <div class="row sub"><span>Total earned</span><span>$${fmt(S.totalEarned)}</span></div></div>
-      <div class="item" id="snd"><div class="row"><span class="t">Sound</span><span>${S.sound ? "ON" : "OFF"}</span></div></div>
-      <button class="big red" id="reset">${["Delete save", "Are you sure?", "Really? Click once more"][resetConfirm]}</button>
-      <div class="sub" style="margin-top:10px">Game saves automatically. Robots keep earning (at half rate) for up to 8 hours while you're away.</div>`;
-    $("snd").addEventListener("click", () => { S.sound = !S.sound; renderPane(); });
-    $("reset").addEventListener("click", () => {
-      if (++resetConfirm >= 3) { localStorage.removeItem(SAVE_KEY); S = freshRun(); cur = null; camY = drawY = 0; resetConfirm = 0; toast("Save deleted"); }
-      renderPane();
-    });
-  }
-}
-function buy(id) {
-  const u = UPGRADES.find(u => u.id === id), l = S.up[id];
-  if (u.max && l >= u.max) return;
-  const c = u.cost(l);
-  if (S.money < c) return;
-  S.money -= c; S.up[id]++; sfx("buy"); cur = null; renderPane(); updateUI();
-}
-function travel(i) {
-  if (i >= S.unlocked || i === S.world) return;
-  S.world = i; cur = null; drawX = WS().x; drawY = WS().y; camY = drawY - PLAYER_ROW;
-  toast(`Welcome to <b>${W().name}</b>`); renderPane(); updateUI();
-}
-function reforge() {
-  const g = pendingShards();
-  if (g < 1) return;
-  if (!reforgeConfirm) { reforgeConfirm = true; renderPane(); return; }
-  const keep = S; keep.shards += g; keep.stats.reforges++;
-  S = freshRun(keep); cur = null; drawX = 4; drawY = 0; camY = -0.5; reforgeConfirm = false;
-  sfx("portal"); toast(`Reforged! You now have ${fmt(S.shards)} Ancient Shards`); save(); renderPane(); updateUI();
-}
-let lastPaneSig = "";
-function updateUI() {
-  const w = W(), ws = WS();
-  $("money").textContent = "$" + fmt(S.money);
-  const inc = robotIncome(S.up.robots);
-  $("income").textContent = inc > 0 ? `+$${fmt(inc)}/s` : "";
-  $("worldName").textContent = `World ${S.world + 1}: ${w.name}`;
-  $("depth").textContent = `Depth ${ws.y}m · best ${ws.max}m`;
-  $("goalBar").style.width = Math.min(100, ws.max / w.goal * 100) + "%";
-  $("goalText").textContent = ws.max >= w.goal ? (S.world + 1 < WORLDS.length ? "Portal reached! Keep digging for richer ore." : "You reached the heart of the Void.") : `Portal at ${w.goal}m — ${w.goal - ws.max}m to go`;
-  $("dynCount").textContent = "x" + S.dyn;
-  $("dynCost").textContent = "$" + fmt(dynCost());
-  $("dynBtn").classList.toggle("on", armed);
-  $("dynBtn").classList.toggle("no", S.dyn <= 0);
-  $("dynBuy").classList.toggle("no", S.money < dynCost());
-  // refresh pane only when something visible changed
-  const sig = tab + "|" + (tab === "shop" ? UPGRADES.map(u => S.up[u.id] + ":" + (S.money >= u.cost(S.up[u.id]))).join() :
-    tab === "reforge" ? pendingShards() + ":" + Math.floor(Math.log10(S.runEarned + 1) * 4) : tab === "more" ? Math.floor(S.stats.time / 60) + ":" + S.stats.blocks : S.unlocked + ":" + Object.keys(S.codex).length + ":" + S.world + ":" + ws.max);
-  if (sig !== lastPaneSig) { lastPaneSig = sig; renderPane(); }
-}
-$("dynBtn").addEventListener("click", () => { if (S.dyn > 0) { armed = !armed; if (armed) toast("Click a spot within 4 tiles to blast it"); updateUI(); } });
-$("dynBuy").addEventListener("click", () => { const c = dynCost(); if (S.money >= c) { S.money -= c; S.dyn++; sfx("buy"); updateUI(); } });
-
-let toastTimer;
-function toast(html) {
-  const t = $("toast"); t.innerHTML = html; t.style.opacity = 1;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.opacity = 0, 2600);
-}
-function showModal(title, body) { $("mTitle").innerHTML = title; $("mBody").innerHTML = body; $("modal").classList.add("on"); holding = false; }
-$("mOk").addEventListener("click", () => $("modal").classList.remove("on"));
-window.addEventListener("beforeunload", save);
+addEventListener("beforeunload", save);
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
 
-// ---------------------------------------------------------------- boot
+// ================================================================ boot
+layout();
 if (load()) {
   const away = Math.min((Date.now() - S.last) / 1000, 8 * 3600);
   const gain = robotIncome(S.up.robots) * away * 0.5;
-  if (gain > 0 && away > 60) { earn(gain); showModal("Welcome back!", `Your robots mined <b style="color:var(--accent)">$${fmt(gain)}</b> while you were away (${(away / 3600).toFixed(1)}h).`); }
+  if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your robots mined $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
 } else {
-  showModal("Pebble Miner", `Click (or hold) on the rock to dig.<br>Your miner digs toward wherever you point.<br><br>Sell nothing — ore pays out instantly. Buy upgrades, reach the <b style="color:#ff7bff">portal</b> at the bottom of each world, and unlock the next.<br><br>Seven worlds. Infinite depth. Good luck!`);
+  showModal("PEBBLE MINER", ["Click or hold on the rock to dig. Your miner digs toward wherever you point.", "Ore pays out instantly. Buy upgrades, reach the portal at the bottom of each world and unlock the next.", "Seven worlds. Infinite depth. Good luck!"]);
 }
 drawX = WS().x; drawY = WS().y; camY = drawY - PLAYER_ROW;
-renderPane(); updateUI();
 requestAnimationFrame(frame);
 </script>
 </body>
