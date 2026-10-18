@@ -25,15 +25,15 @@ const C = {
   gold: "#ffe33a", red: "#ff5a4e", green: "#8dff6a", dim: "#d9a6e6", pit: "#b8b8b8",
   hud: "#0e3c78", hudHi: "#79b0ea",
 };
-// economy knobs (tuned with a headless pacing sim: ~30h to finish for an efficient player,
+// economy knobs (tuned with a headless pacing sim: ~15h to finish for an efficient player,
 // with every tool in a world taking about as long as the one before)
 const BAL = {
   toolGrow: 2,       // each tool digs this much faster
-  toolC0: 1500,      // base tool price (the second tool is a cheap 1/6 of it)
+  toolC0: 1000,      // base tool price (the second tool is a cheap 1/6 of it)
   toolCg: 2.6,       // each tool costs this much more than the last...
   toolCgW: 0,        // ...plus this much per world
   worldVal: 1000,    // pixels are worth this much more in each new world
-  worldHard: 18,     // and prices rise this much more than that
+  worldHard: 17.3,   // and prices rise this much more than that
   portalMul: 2,      // the portal costs this many times the last tool
   tEvery: 30,        // seconds between treasures, on average
   tSec: 20,          // a common treasure is worth this many seconds of digging
@@ -68,11 +68,11 @@ const WORLDS = [
 ];
 // Multipliers persist between worlds; each world raises their level cap by `per`.
 const MULTS = [
-  { id: "coffee", name: "Strong Coffee", icon: "cup", per: 10, base: 60, grow: 3, desc: l => `DIG SPEED X${fmt2(Math.pow(1.15, l))}` },
-  { id: "moles", name: "Helper Moles", icon: "mole", per: 10, base: 150, grow: 3, desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}` },
-  { id: "sharp", name: "Sharp Edges", icon: "pick", per: 10, base: 40, grow: 3, desc: l => `CLICK POWER X${fmt2(1 + l * .5)}` },
-  { id: "luck", name: "Lucky Charm", icon: "clover", per: 5, base: 300, grow: 3, desc: l => `TREASURE X${fmt2(1 + l * .15)} AS OFTEN` },
-  { id: "apprais", name: "Appraiser", icon: "glass", per: 10, base: 400, grow: 3, desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}` },
+  { id: "coffee", name: "Strong Coffee", icon: "cup", per: 10, base: 42, grow: 3, desc: l => `DIG SPEED X${fmt2(Math.pow(1.15, l))}` },
+  { id: "moles", name: "Helper Moles", icon: "mole", per: 10, base: 105, grow: 3, desc: l => `${l} MOLES: DIG X${fmt2(1 + l * .1)}` },
+  { id: "sharp", name: "Sharp Edges", icon: "pick", per: 10, base: 28, grow: 3, desc: l => `CLICK POWER X${fmt2(1 + l * .5)}` },
+  { id: "luck", name: "Lucky Charm", icon: "clover", per: 5, base: 210, grow: 3, desc: l => `TREASURE X${fmt2(1 + l * .15)} AS OFTEN` },
+  { id: "apprais", name: "Appraiser", icon: "glass", per: 10, base: 280, grow: 3, desc: l => `TREASURE VALUE X${fmt2(1 + l * .3)}` },
   { id: "shift", name: "Night Shift", icon: "moon", per: 2, base: 1000, grow: 3, desc: l => `EARN ${l * 5}% WHILE AWAY` },
 ];
 
