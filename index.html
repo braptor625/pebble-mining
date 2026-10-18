@@ -592,26 +592,27 @@ function item(x, y, w, h, fn, opt = {}) {
   return { ink: sel ? C.black : opt.disabled ? "#c08ad0" : "#ffffff", d: down ? 1 : 0, sel };
 }
 function panelBg(x, y, w, h) { cx.fillStyle = C.purpleLo; cx.fillRect(x, y, w, h); cx.fillStyle = C.purple; cx.fillRect(x + 1, y + 1, w - 2, h - 2); }
+const TIPS = ["HOLD THE MINE TO DIG FASTER", "CLICK THE GOLDEN PIXEL!", "SELL TREASURE FOR PIXELS", "8 TOOLS OPEN THE PORTAL", "MULTIPLIERS CARRY OVER"];
 function drawPanel(now) {
   const X = L.px, Y = L.py, PW = 144;
   panelBg(X, Y, PW, 172);
-  // header mirrors the in-game HUD, in the menu's yellow
-  hudBox(X + 2, Y + 2, 70, "PPS", fmt(ppsShown), C.yellow, C.black, C.black);
-  hudBox(X + 73, Y + 2, 69, "DEPTH", String(depthNow()), C.yellow, C.black, C.black);
-  hudBox(X + 2, Y + 13, 140, "PIXELS", fmtC(S.px), C.yellow, C.black, C.black);
-  const tY = Y + 25;
+  // header: which world you're in and how far through its tools
+  cx.fillStyle = C.yellow; cx.fillRect(X + 2, Y + 2, PW - 4, 17);
+  txt(`${S.w + 1}. ${W().name}`, X + 5, Y + 4, C.black);
+  txt(`TOOL ${S.t + 1}/${TOOLS}`, X + PW - 5, Y + 4, C.black, 1, "right");
+  cx.fillStyle = C.yellowLo; cx.fillRect(X + 4, Y + 11, PW - 8, 6);
+  W().tools.forEach((q, i) => {
+    cx.fillStyle = i <= S.t ? C.purple : "#e8cc20"; cx.fillRect(X + 5 + i * 17, Y + 12, 16, 4);
+    region(X + 4 + i * 17, Y + 2, 17, 17, null, i <= S.t + 1 ? `${i + 1}. ${q[0]}` : `${i + 1}. ???`);
+  });
+  const tY = Y + 22;
   TABS.forEach(([id, ic, label], i) => {
     const x = X + 2 + i * 35, r = item(x, tY, 35, 15, () => { tab = id; confirmKey = null; sfx("click"); }, { on: tab === id, tip: label });
     icon(ic, x + 14, tY + 4 + r.d);
   });
-  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, Y + 42, PW - 4, 112, now);
-  // footer: world + tool progress
-  const fY = Y + 157;
-  txt(`${S.w + 1}. ${W().name}`, X + 4, fY + 1, C.yellow);
-  txt(`${S.t + 1}/${TOOLS}`, X + PW - 4, fY + 1, "#ffffff", 1, "right");
-  cx.fillStyle = C.purpleLo; cx.fillRect(X + 3, fY + 8, PW - 6, 5);
-  for (let i = 0; i < TOOLS; i++) { cx.fillStyle = i <= S.t ? C.yellow : C.purple2; cx.fillRect(X + 4 + i * 17, fY + 9, 16, 3); }
-  region(X + 2, fY, PW - 4, 14, null, S.t + 1 < TOOLS ? `${TOOLS - S.t - 1} TOOLS LEFT IN THIS WORLD` : S.w + 1 < WORLDS.length ? "PORTAL READY TO BUY" : "LAST WORLD");
+  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, Y + 40, PW - 4, 112, now);
+  // rotating tip
+  txt(TIPS[Math.floor(now / 6000) % TIPS.length], X + PW / 2, Y + 160, C.dim, 1, "center");
 }
 function previewBox(x, y, sel, ground) {
   cx.fillStyle = sel ? "#e8cc20" : "#00000040"; cx.fillRect(x, y, 38, 48);
@@ -647,18 +648,9 @@ function paneEquip(x, y, w, h, now) {
     txt("ALL WORLDS CONQUERED!", x + w / 2, y + 38, "#ffffff", 1, "center");
     txt("KEEP DIGGING FOR TREASURE", x + w / 2, y + 47, C.dim, 1, "center");
   }
-  // this world's tool chain
-  txt(W().name.split(" ").pop() + " TOOLS", x + 3, y + 76, C.dim);
-  W().tools.forEach((q, i) => {
-    const sx = x + 3 + i * 17, sy = y + 84;
-    cx.fillStyle = C.purpleLo; cx.fillRect(sx, sy, 15, 11);
-    cx.fillStyle = i <= S.t ? C.yellow : i === S.t + 1 ? ((now / 300 | 0) % 2 ? C.purpleHi : C.purple2) : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 13, 9);
-    if (i <= S.t) txt(String(i + 1), sx + 8, sy + 3, C.black, 1, "center");
-    region(sx, sy, 15, 11, null, i <= S.t + 1 ? q[0] : "???");
-  });
-  // worlds
+  txt("WORLDS", x + 3, y + 78, C.dim);
   WORLDS.forEach((wd, i) => {
-    const sx = x + 3 + i * 19, sy = y + 99;
+    const sx = x + 3 + i * 19, sy = y + 86;
     cx.fillStyle = C.purpleLo; cx.fillRect(sx, sy, 17, 9);
     cx.fillStyle = i < S.w ? C.green : i === S.w ? C.yellow : "#4e1660"; cx.fillRect(sx + 1, sy + 1, 15, 7);
     region(sx, sy, 17, 9, null, i <= S.w ? `WORLD ${i + 1}: ${wd.name}` : `WORLD ${i + 1}: ???`);
