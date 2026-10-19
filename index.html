@@ -80,7 +80,7 @@ const MULTS = [
 let S;
 function freshState() {
   return { px: 0, total: 0, w: 0, t: 0, dist: 0, m: { coffee: 0, moles: 0, sharp: 0, luck: 0, apprais: 0, shift: 0 },
-    inv: {}, found: {}, sound: true, won: false, stats: { time: 0, clicks: 0, treasures: 0, golden: 0 }, last: Date.now() };
+    inv: {}, found: {}, relics: null, sec: {}, sound: true, won: false, stats: { time: 0, clicks: 0, treasures: 0, golden: 0 }, last: Date.now() };
 }
 function load() {
   try {
@@ -103,7 +103,7 @@ let frenzy = 0;
 // dirt pixels per second (before the world's pixel value)
 function power(noFrenzy) {
   const p = Math.pow(BAL.toolGrow, S.t) * Math.pow(1.15, S.m.coffee) * (1 + S.m.moles * .1);
-  return p * (frenzy > 0 && !noFrenzy ? 7 : 1);
+  return p * relicMult() * (frenzy > 0 && !noFrenzy ? 7 : 1);
 }
 const clickPower = () => Math.max(1, power() * BAL.clickFrac) * (1 + S.m.sharp * .5);
 const luckMult = () => 1 + S.m.luck * .15;
@@ -127,6 +127,103 @@ function treasureAt(seg) {
 }
 const treasureValue = i => BAL.tSec * power(true) * worldScale() * W().loot[i][3] * (1 + S.m.apprais * .3);
 
+
+// ================================================================ relic index (endgame collection, unlocked in the last world)
+// Tiers: [name, colour, odds per treasure found (1 in N), bonus to all pixel income]
+const TIERS = [["COMMON", "#c8c8c8", 25, .01], ["UNCOMMON", "#6fdc6f", 100, .02], ["RARE", "#5cb8ff", 400, .04],
+  ["EPIC", "#c77dff", 1600, .08], ["LEGENDARY", "#ffb020", 6400, .15], ["MYTHIC", "#ff4d6d", 25600, .3], ["SECRET", "#ffffff", 0, .05]];
+// Relic: [id, name, tier, shape, colour, hint (secrets only)]
+const RELICS = [
+  ["nail", "Bent Nail", 0, "diamond", "#9aa0aa"], ["boot", "Old Boot", 0, "potion", "#7a4a2a"], ["key", "Rusty Key", 0, "star", "#b86a3a"],
+  ["marble", "Clay Marble", 0, "round", "#d9814a"], ["penny", "Lucky Penny", 0, "coin", "#d98a4a"], ["shell", "Fossil Shell", 0, "heart", "#e0d0b0"],
+  ["lens", "Cracked Lens", 0, "round", "#bfe8ff"], ["soldier", "Tin Soldier", 0, "idol", "#a0a8b8"],
+  ["compass", "Brass Compass", 1, "coin", "#e0b040"], ["eye", "Glass Eye", 1, "round", "#7fd6ff"], ["badge", "Miner's Badge", 1, "star", "#ffd23f"],
+  ["spoon", "Silver Spoon", 1, "potion", "#e6eef2"], ["amberbug", "Amber Bug", 1, "heart", "#ff9f1c"], ["tooth", "Dino Tooth", 1, "diamond", "#f0ead0"],
+  ["watch", "Pocket Watch", 1, "coin", "#ffe14d"],
+  ["frog", "Jade Frog", 2, "idol", "#36e07a"], ["meteor", "Meteor Shard", 2, "diamond", "#8a6f5a"], ["skull", "Crystal Skull", 2, "idol", "#c0f0ff"],
+  ["doubloon", "Pirate Doubloon", 2, "coin", "#ffd23f"], ["lantern", "Ghost Lantern", 2, "potion", "#8dff6a"], ["scarab", "Ruby Scarab", 2, "round", "#ff2e4d"],
+  ["feather", "Phoenix Feather", 3, "star", "#ff7b00"], ["ring", "Moonstone Ring", 3, "round", "#e8e8ff"], ["egg", "Dragon Egg", 3, "heart", "#5c3b8a"],
+  ["hourglass", "Hourglass", 3, "potion", "#ffcc66"],
+  ["crown", "Crown of Depths", 4, "crown", "#ffd23f"], ["atlas", "Atlas Orb", 4, "round", "#4cc9f0"], ["stone", "Philosopher's Stone", 4, "diamond", "#ff2d6f"],
+  ["heart", "Heart of the Planet", 5, "heart", "#ff4d6d"], ["pixel", "The First Pixel", 5, "star", "#ffffff"],
+  ["cloud", "Cloud Pearl", 6, "round", "#ffffff", "THE SKY HAS POCKETS"],
+  ["patience", "Patience Stone", 6, "round", "#8a8f99", "DO NOTHING AT ALL FOR TEN MINUTES"],
+  ["moonlit", "Moonlit Fossil", 6, "heart", "#c0c8ff", "DIG UP TREASURE AFTER MIDNIGHT"],
+  ["unlucky", "Unlucky Coin", 6, "coin", "#6a6a6a", "SELL AN UNLUCKY NUMBER OF A THING"],
+  ["grip", "Iron Grip", 6, "idol", "#9aa0aa", "HOLD ON FOR A WHOLE MINUTE"],
+  ["helmet", "Bruised Helmet", 6, "crown", "#e8202a", "POKE THE MINER. A LOT."],
+  ["palin", "Palindrome Gem", 6, "diamond", "#ff9cf7", "MAKE PIXELS AND PPS PALINDROMES"],
+  ["fork", "Tuning Fork", 6, "star", "#cfd6de", "FIDDLE WITH THE SOUND"],
+  ["second", "Second Thoughts", 6, "potion", "#ff9ab0", "ALMOST DELETE YOUR SAVE, 5 TIMES"],
+  ["rainbow", "Double Rainbow", 6, "star", "#ffe33a", "GET GREEDY DURING A FRENZY"],
+  ["fingers", "Frenzy Fingers", 6, "heart", "#ffb020", "CLICK 140 TIMES IN ONE FRENZY"],
+  ["capsule", "Time Capsule", 6, "potion", "#5cf0ff", "LEAVE FOR A WHOLE DAY"],
+  ["hoard", "Dragon Hoard", 6, "crown", "#ffd23f", "HOARD 500 UNSOLD TREASURES"],
+  ["prospect", "Prospector's Eye", 6, "round", "#36e07a", "INSPECT WHAT'S BURIED AHEAD"],
+  ["gauge", "Depth Gauge", 6, "coin", "#79b0ea", "TAP THE DEPTH GAUGE, QUICKLY"],
+  ["owl", "Night Owl", 6, "idol", "#a77bf3", "STAY FOR THREE HOURS STRAIGHT"],
+];
+const relicTier = r => TIERS[r[2]];
+const indexOpen = () => !!S.relics;
+// all pixel income gets this multiplier; duplicates add a tenth of the relic's bonus each
+function relicMult() {
+  if (!S.relics) return 1;
+  let m = 1;
+  for (const r of RELICS) { const n = S.relics.found[r[0]] || 0; if (n) m += relicTier(r)[3] * (1 + (n - 1) * .1); }
+  return m;
+}
+function openIndex() {
+  if (S.relics) return;
+  S.relics = { found: {} };
+  showModal("RELIC INDEX!", ["The Void hides relics: 30 buried in the dark and 16 earned in stranger ways.", "Each treasure you dig up has a tiny chance of turning up a relic. Every relic boosts your pixels forever.", "Check the new book tab."]);
+  for (const id in SECRET_GOALS) if (S.sec[id] >= SECRET_GOALS[id]) giveRelic(id);
+}
+// counted from the start of the game, awarded once the index is open
+const SECRET_GOALS = { cloud: 50, helmet: 100, prospect: 25, second: 5 };
+function bump(id) { S.sec[id] = (S.sec[id] || 0) + 1; if (S.sec[id] >= SECRET_GOALS[id]) giveRelic(id); }
+function giveRelic(id) {
+  if (!S.relics) return;
+  const r = RELICS.find(r => r[0] === id), t = relicTier(r), f = S.relics.found, first = !f[id];
+  if (r[2] === 6 && !first) return; // secrets are one-off
+  f[id] = (f[id] || 0) + 1;
+  sfx(r[2] >= 4 ? "portal" : "rare"); shake = r[2] >= 4 ? 8 : 3;
+  pops.push({ x: FRONT, y: floorY() - 40, gem: [r[3], r[4]], txt: "", c: r[4], l: 1.8 });
+  if (first && (r[2] >= 4 || r[2] === 6)) showModal(r[2] === 6 ? "SECRET RELIC!" : t[0] + " RELIC!", [`You found the ${r[1]}.`, `All pixel income is now X${relicMult().toFixed(2)}.`]);
+  else toast((first ? "NEW RELIC: " : "RELIC AGAIN: ") + r[1], t[1]);
+}
+// rolled once per treasure found
+function rollRelic() {
+  if (!S.relics) return;
+  const roll = Math.random() / luckMult();
+  let acc = 0;
+  for (let tier = 5; tier >= 0; tier--) {
+    acc += 1 / TIERS[tier][2];
+    if (roll < acc) {
+      const pool = RELICS.filter(r => r[2] === tier);
+      giveRelic(pool[Math.floor(Math.random() * pool.length)][0]);
+      return;
+    }
+  }
+}
+// session-only trackers for the secret relics
+const SEC = { lastInput: performance.now(), holdStart: 0, sound: [], gauge: [], frenzyClicks: 0, session: 0, palinT: 0 };
+function secretTick(dt, now) {
+  if (!S.relics) return;
+  const f = S.relics.found;
+  SEC.session += dt;
+  if (!f.patience && now - SEC.lastInput > 600000) giveRelic("patience");
+  if (!f.grip && holding && SEC.holdStart && now - SEC.holdStart > 60000) giveRelic("grip");
+  if (!f.owl && SEC.session > 3 * 3600) giveRelic("owl");
+  if (!f.hoard) { let n = 0; for (const k in S.inv) n += S.inv[k].n; if (n >= 500) giveRelic("hoard"); }
+  if (!f.palin && (SEC.palinT += dt) > .5) {
+    SEC.palinT = 0;
+    // the numbers as the HUD shows them, digits only: e.g. 12.21K and 3.03M
+    const pal = v => { const d = fmt(v).replace(/[^0-9]/g, ""); return d.length >= 3 && d === [...d].reverse().join(""); };
+    const big = fmt(S.px).replace(/[^0-9]/g, "").length >= 4;
+    if (big && pal(S.px) && pal(ppsShown)) giveRelic("palin");
+  }
+}
+
 // ================================================================ game actions
 const fx = [], pops = [];
 let shake = 0, digAnim = 0, earnedFrame = 0, ppsShown = 0, golden = null, goldenTimer = 40, goldenMsg = null, dropAnim = 0;
@@ -149,21 +246,25 @@ function collect(i) {
   else toast("FOUND " + item[0], item[2]);
   pops.push({ x: FRONT, y: floorY() - 30, gem: [item[1], item[2]], txt: "", c: item[2], l: 1.4 });
   sfx(i >= 3 ? "rare" : "ore");
+  if (S.relics) { if (new Date().getHours() < 4) giveRelic("moonlit"); rollRelic(); }
 }
 function clickDig() {
   const p = clickPower();
   earn(p * worldScale()); advance(1.5); S.stats.clicks++; digAnim = 1;
+  if (frenzy > 0 && ++SEC.frenzyClicks >= 140) giveRelic("fingers");
   sfx("hit");
   debris(FRONT, floorY() - 6, groundColor(S.t), 4);
   if (Math.random() < .35) pops.push({ x: FRONT + (Math.random() - .5) * 16, y: floorY() - 34, txt: "+" + fmt(p * worldScale()), c: "#ffffff", l: .8 });
 }
 function sell(key) {
   const st = S.inv[key]; if (!st) return;
+  if (st.n === 13) giveRelic("unlucky");
   earn(st.v); delete S.inv[key]; sfx("sell");
 }
 function sellAll() {
   let t = 0; for (const k in S.inv) t += S.inv[k].v;
   if (!t) return;
+  if (Object.values(S.inv).some(st => st.n === 13)) giveRelic("unlucky");
   earn(t); S.inv = {}; sfx("sell"); toast("SOLD FOR $" + fmt(t), C.yellow);
 }
 const invTotal = () => { let t = 0; for (const k in S.inv) t += S.inv[k].v; return t; };
@@ -188,6 +289,8 @@ function buyMult(id) {
 }
 function clickGolden() {
   S.stats.golden++; sfx("rare"); shake = 4;
+  if (frenzy > 0) giveRelic("rainbow");
+  SEC.frenzyClicks = 0;
   if (Math.random() < .6) { frenzy = 20; goldenMsg = { t: 2, txt: "FRENZY! X7 FOR 20S" }; }
   else { const v = Math.max(ppsShown, 1) * 120; earn(v); goldenMsg = { t: 2, txt: "LUCKY! +$" + fmt(v) }; }
   golden = null;
@@ -404,13 +507,16 @@ const pitColor = k => mix(groundColor(k), C.pit, .72);
 const targetCamY = () => (S.t + 1) * LB - 124;
 const floorY = () => (S.t + 1) * LB - Math.round(camY);
 
+let cloudRects = [], buriedRects = [];
 function drawClouds(now) {
   const top = -camY;
+  cloudRects = [];
   if (top < HUD_H) return;
   cx.fillStyle = W().cloud;
   for (let i = 0; i < 3; i++) {
     const x = VW + 30 - ((now / (90 + i * 40) + S.dist * .3 + i * 70) % (VW + 60)), y = top - 26 - i * 13 + (i === 1 ? 6 : 0);
     cx.fillRect(Math.round(x), y, 18, 4); cx.fillRect(Math.round(x) + 4, y - 3, 9, 3);
+    cloudRects.push([Math.round(x) - 2, y - 5, 22, 11]);
   }
 }
 function drawScene(now) {
@@ -448,12 +554,14 @@ function drawScene(now) {
   cx.fillStyle = mix(groundColor(S.t), "#000000", .35);
   for (let yy = 0; yy < LB; yy += 2) cx.fillRect(FRONT + Math.round(hash(yy, Math.floor(S.dist), 1) * 2), fy - LB + yy, 1, 2);
   // treasure buried ahead in this layer
+  buriedRects = [];
   for (let seg = Math.floor(S.dist / SEG); seg <= Math.floor((S.dist + VW) / SEG); seg++) {
     const t = treasureAt(seg);
     if (!t || t.x <= S.dist) continue;
     const x = FRONT + t.x - S.dist, it = w.loot[t.i];
     if (x > VW + 4) continue;
     gem(it[1], it[2], x - 3, fy - 15);
+    buriedRects.push([x - 6, fy - 18, 13, 13]);
     if (t.i >= 2 && (now / 200 + seg) % 8 < 1) { cx.fillStyle = "#ffffff"; cx.fillRect(Math.round(x), fy - 17, 1, 3); cx.fillRect(Math.round(x) - 1, fy - 16, 3, 1); }
   }
   drawDigger(now);
@@ -578,7 +686,7 @@ function drawVehicle(e, now) {
 
 // ================================================================ panel UI (immediate mode)
 let regions = [], mouse = null, mouseDown = false, tab = "equip", confirmKey = null, tip = null, modal = null, toastMsg = null;
-const TABS = [["equip", "tools", "EQUIPMENT: DIG DEEPER"], ["mult", "bolt", "MULTIPLIERS: MINE QUICKER"], ["treasure", "gem", "TREASURE: SELL HERE"], ["more", "gear", "COLLECTION & SETTINGS"]];
+const TABS = [["equip", "tools", "EQUIPMENT: DIG DEEPER"], ["mult", "bolt", "MULTIPLIERS: MINE QUICKER"], ["treasure", "gem", "TREASURE: SELL HERE"], ["index", "book", "RELIC INDEX"], ["more", "gear", "COLLECTION & SETTINGS"]];
 const inR = (x, y, w, h) => mouse && mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h;
 function region(x, y, w, h, fn, tipText) { regions.push({ x, y, w, h, fn }); if (tipText && inR(x, y, w, h)) tip = tipText; }
 // purple menu row; hovered rows turn yellow like the original's selection
@@ -606,10 +714,11 @@ function drawPanel(now) {
   });
   const tY = Y + 22;
   TABS.forEach(([id, ic, label], i) => {
-    const x = X + 2 + i * 35, r = item(x, tY, 35, 15, () => { tab = id; confirmKey = null; sfx("click"); }, { on: tab === id, tip: label });
-    icon(ic, x + 14, tY + 4 + r.d);
+    const locked = id === "index" && !indexOpen();
+    const x = X + 2 + i * 28, r = item(x, tY, 28, 15, () => { tab = id; cancelConfirm(); sfx("click"); }, { on: tab === id, disabled: locked, tip: locked ? "REACH THE LAST WORLD TO UNLOCK" : label });
+    icon(locked ? "lock" : ic, x + 10, tY + 4 + r.d);
   });
-  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore })[tab](X + 2, Y + 40, PW - 4, 112, now);
+  ({ equip: paneEquip, mult: paneMult, treasure: paneTreasure, more: paneMore, index: paneIndex })[tab](X + 2, Y + 40, PW - 4, 112, now);
 }
 function previewBox(x, y, sel, ground) {
   cx.fillStyle = sel ? "#e8cc20" : "#00000040"; cx.fillRect(x, y, 38, 48);
@@ -693,7 +802,11 @@ function paneMore(x, y, w) {
       region(sx, iy, 9, 9, null, f ? it[0] : "???");
     });
   });
-  let r = item(x, y + 76, w, 14, () => { S.sound = !S.sound; sfx("click"); });
+  let r = item(x, y + 76, w, 14, () => {
+    S.sound = !S.sound; sfx("click");
+    const now = performance.now(); SEC.sound = SEC.sound.filter(t => now - t < 10000); SEC.sound.push(now);
+    if (SEC.sound.length >= 10) giveRelic("fork");
+  });
   txt("SOUND: " + (S.sound ? "ON" : "OFF"), x + 5, y + 81 + r.d, r.ink);
   txt((S.stats.time / 3600).toFixed(1) + "H PLAYED", x + w - 4, y + 81 + r.d, r.sel ? C.black : C.dim, 1, "right");
   const step = confirmKey === "reset2" ? 2 : confirmKey === "reset1" ? 1 : 0;
@@ -702,6 +815,34 @@ function paneMore(x, y, w) {
     else confirmKey = step ? "reset2" : "reset1";
   }, { on: step > 0 });
   txt(["DELETE SAVE", "ARE YOU SURE?", "REALLY? CLICK ONCE MORE"][step], x + w / 2, y + 98 + r.d, r.sel ? "#a01010" : "#ff9ab0", 1, "center");
+}
+function paneIndex(x, y, w) {
+  const f = S.relics.found, n = RELICS.filter(r => f[r[0]]).length;
+  txt(`RELICS ${n}/${RELICS.length}`, x + 3, y + 2, "#ffffff");
+  txt(`PIXELS X${relicMult().toFixed(2)}`, x + w - 3, y + 2, C.yellow, 1, "right");
+  let hov = null;
+  RELICS.forEach((r, i) => {
+    const sx = x + (i % 10) * 14, sy = y + 10 + Math.floor(i / 10) * 14, t = relicTier(r), got = f[r[0]];
+    const on = inR(sx, sy, 13, 13);
+    if (on) hov = r;
+    cx.fillStyle = on ? C.yellow : got ? t[1] : "#4e1660"; cx.fillRect(sx, sy, 13, 13);
+    cx.fillStyle = got ? mix(t[1], "#000000", .6) : C.purpleLo; cx.fillRect(sx + 1, sy + 1, 11, 11);
+    if (got) gem(r[3], r[4], sx + 3, sy + 3);
+    else if (r[2] === 6) txt("?", sx + 5, sy + 4, "#9a5aaa");
+    else { cx.fillStyle = mix(t[1], C.purpleLo, .5); cx.fillRect(sx + 5, sy + 5, 3, 3); }
+  });
+  const dy = y + 84;
+  if (!hov) {
+    txt("HOVER A RELIC TO INSPECT IT", x + w / 2, dy + 2, C.dim, 1, "center");
+    txt("TREASURE CAN TURN UP RELICS.", x + w / 2, dy + 11, C.dim, 1, "center");
+    txt("LUCKY CHARM BOOSTS THE ODDS.", x + w / 2, dy + 19, C.dim, 1, "center");
+    return;
+  }
+  const t = relicTier(hov), got = f[hov[0]] || 0, secret = hov[2] === 6;
+  txt(got ? hov[1] : "???", x + 3, dy + 2, t[1]);
+  txt(t[0], x + w - 3, dy + 2, t[1], 1, "right");
+  txt(secret ? (got ? "UNLOCKED" : "HOW TO FIND IT:") : `ODDS: 1 IN ${fmtC(t[2])} TREASURES`, x + 3, dy + 11, "#ffffff");
+  txt(secret && !got ? hov[5] : got ? `FOUND X${got}: +${Math.round(t[3] * (1 + (got - 1) * .1) * 100)}% PIXELS` : `+${Math.round(t[3] * 100)}% PIXELS WHEN FOUND`, x + 3, dy + 19, secret && !got ? C.yellow : C.dim);
 }
 function drawToast() {
   if (!toastMsg) return;
@@ -732,7 +873,7 @@ function drawModal() {
   cx.fillStyle = C.yellow; cx.fillRect(x + 1, y + 1, wd - 2, 20);
   txt(modal.title, x + wd / 2, y + 6, C.black, 2, "center");
   lines.forEach((l, i) => txt(l, x + 8, y + 27 + i * 7, "#ffffff"));
-  const r = item(x + wd / 2 - 25, y + h - 19, 50, 14, () => { modal = null; sfx("click"); });
+  const r = item(x + wd / 2 - 25, y + h - 19, 50, 14, () => { modal = modalQueue.shift() || null; sfx("click"); });
   txt("OK", x + wd / 2, y + h - 14 + r.d, r.ink, 1, "center");
 }
 function drawCursor() {
@@ -744,8 +885,23 @@ function drawCursor() {
   cx.fillRect(x, y, 1, 7); cx.fillRect(x, y, 7, 1);
 }
 function toast(text, col = "#ffffff") { toastMsg = { text: String(text).toUpperCase(), col, t: 2.6 }; }
-function showModal(title, body) { modal = { title, body }; holding = false; }
+const modalQueue = [];
+function showModal(title, body) { if (modal) modalQueue.push({ title, body }); else modal = { title, body }; holding = false; }
 
+// clicks on special spots in the scene count toward secret relics
+function pokeScene(x, y) {
+  const hit = r => x >= r[0] && x < r[0] + r[2] && y >= r[1] && y < r[1] + r[3];
+  if (cloudRects.some(hit)) bump("cloud");
+  if (buriedRects.some(hit)) bump("prospect");
+  const tw0 = toolWidth(tool()[1]), fy = floorY();
+  if (x >= FRONT - tw0 && x < FRONT + 2 && y >= fy - 24 && y < fy) bump("helmet");
+  if (x >= 73 && x < 143 && y >= 1 && y < 11) {
+    const now = performance.now(); SEC.gauge = SEC.gauge.filter(t => now - t < 3000); SEC.gauge.push(now);
+    if (SEC.gauge.length >= 7) giveRelic("gauge");
+  }
+}
+// backing out of a pending save deletion
+function cancelConfirm() { if (confirmKey && confirmKey.startsWith("reset")) bump("second"); confirmKey = null; }
 // ================================================================ input
 let holding = false, nextClick = 0;
 function toLogical(e) {
@@ -755,20 +911,21 @@ function toLogical(e) {
 const inScene = m => m.x >= L.sx && m.x < L.sx + VW && m.y >= L.sy && m.y < L.sy + VH;
 cv.addEventListener("pointerdown", e => {
   e.preventDefault(); cv.setPointerCapture(e.pointerId);
-  mouse = toLogical(e); mouseDown = true;
+  mouse = toLogical(e); mouseDown = true; SEC.lastInput = performance.now();
   for (let i = regions.length - 1; i >= 0; i--) {
     const r = regions[i];
     if (mouse.x >= r.x && mouse.x < r.x + r.w && mouse.y >= r.y && mouse.y < r.y + r.h) { if (r.fn) r.fn(); return; }
   }
   if (modal) return;
-  if (!inScene(mouse)) { confirmKey = null; return; }
+  if (!inScene(mouse)) { cancelConfirm(); return; }
   if (golden && Math.abs(mouse.x - L.sx - golden.x) < 8 && Math.abs(mouse.y - L.sy - golden.y) < 8) { clickGolden(); return; }
-  holding = true;
+  pokeScene(mouse.x - L.sx, mouse.y - L.sy);
+  holding = true; SEC.holdStart = performance.now();
   const now = performance.now();
   if (now >= nextClick) { clickDig(); nextClick = now + BAL.clickGap; }
 });
 cv.addEventListener("pointermove", e => { mouse = toLogical(e); });
-addEventListener("pointerup", () => { holding = false; mouseDown = false; });
+addEventListener("pointerup", () => { holding = false; mouseDown = false; SEC.holdStart = 0; });
 cv.addEventListener("pointerleave", () => { if (!holding) mouse = null; });
 cv.addEventListener("contextmenu", e => e.preventDefault());
 
@@ -776,6 +933,8 @@ cv.addEventListener("contextmenu", e => e.preventDefault());
 let lastT = performance.now(), saveAcc = 0;
 function update(dt, now) {
   S.stats.time += dt;
+  secretTick(dt, now);
+  if (S.w === WORLDS.length - 1 && !S.relics && !modal) openIndex();
   if (holding && !modal && now >= nextClick) { clickDig(); nextClick = now + BAL.clickGap; }
   if (!modal) { earn(power() * worldScale() * dt); advance(digSpeed() * dt); }
   ppsShown += (earnedFrame / Math.max(dt, 1e-3) - ppsShown) * Math.min(1, dt * 1.5);
@@ -833,6 +992,7 @@ if (load()) {
   const away = Math.min((Date.now() - S.last) / 1000, 12 * 3600), frac = S.m.shift * .05;
   const gain = power(true) * worldScale() * away * frac;
   if (gain > 0 && away > 60) { earn(gain); showModal("WELCOME BACK!", [`Your night shift dug up $${fmt(gain)} while you were away (${(away / 3600).toFixed(1)}h).`]); }
+  if ((Date.now() - S.last) / 1000 >= 86400) giveRelic("capsule");
 } else {
   showModal("STRATA MINER", ["Your miner digs on their own. Click or hold on the screen to dig faster.", "Each new tool takes you one layer deeper. Get all 8 to open the portal to the next world.", "Multipliers dig quicker. Sell the treasure you dig up."]);
 }

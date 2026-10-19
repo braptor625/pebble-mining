@@ -10,3 +10,4 @@ A mouse-only incremental digging game in chunky pixel art.
 - A new world resets your tools and pixels. **Multipliers** carry over, and every world raises their level caps.
 - Dig into the **Treasure** buried in your layer, then sell it. Fill the collection: 5 treasures in each of the 7 worlds.
 - Click the golden pixel when it appears for a frenzy or a pixel bonus.
+- Reaching the last world unlocks the **Relic Index**: 30 relics turn up with ever lower odds (1 in 25 treasures down to 1 in 25,600), and 16 secret relics are earned by doing odd things. The index shows a clue for each. Every relic permanently boosts your pixel income.
