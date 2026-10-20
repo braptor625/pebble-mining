@@ -25,7 +25,7 @@ const C = {
   gold: "#ffe33a", red: "#ff5a4e", green: "#8dff6a", dim: "#d9a6e6", pit: "#b8b8b8",
   hud: "#0e3c78", hudHi: "#79b0ea",
 };
-// economy knobs (tuned with a headless pacing sim: ~15h to finish for an efficient player,
+// economy knobs (tuned with a headless pacing sim: ~13h to finish for an efficient player,
 // with every tool in a world taking about as long as the one before)
 const BAL = {
   toolGrow: 2,       // each tool digs this much faster
@@ -33,7 +33,8 @@ const BAL = {
   toolCg: 2.6,       // each tool costs this much more than the last...
   toolCgW: 0,        // ...plus this much per world
   worldVal: 1000,    // pixels are worth this much more in each new world
-  worldHard: 17.3,   // and prices rise this much more than that
+  // entering each world, prices rise this much more than pixel value (world 6 is gentler)
+  worldHard: [17.3, 17.3, 17.3, 17.3, 10, 30],
   portalMul: 2,      // the portal costs this many times the last tool
   tEvery: 30,        // seconds between treasures, on average
   tSec: 20,          // a common treasure is worth this many seconds of digging
@@ -94,7 +95,7 @@ function save() { S.last = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON
 const W = () => WORLDS[S.w];
 const tool = (w = S.w, t = S.t) => WORLDS[w].tools[t];
 const worldScale = (w = S.w) => Math.pow(BAL.worldVal, w);
-const priceScale = (w = S.w) => Math.pow(BAL.worldVal * BAL.worldHard, w);
+const priceScale = (w = S.w) => BAL.worldHard.slice(0, w).reduce((p, h) => p * h * BAL.worldVal, 1);
 const toolCost = t => BAL.toolC0 * Math.pow(BAL.toolCg + BAL.toolCgW * S.w, t - 1) * priceScale() / (t === 1 ? 6 : 1);
 const portalCost = () => toolCost(TOOLS - 1) * BAL.portalMul;
 const multCap = m => m.per * (S.w + 1);
